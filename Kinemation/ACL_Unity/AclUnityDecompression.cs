@@ -466,7 +466,7 @@ namespace AclUnity
                 samplePoseMaskedNative(compressedTransformTracks, compressedScaleTracks, aosOutputBuffer, mask, time, keyframeInterpolationMode);
             }
 
-#if UNITY_ANDROID && UNITY_64 && !UNITY_EDITOR
+#if UNITY_ANDROID && !UNITY_EDITOR
             [DllImport(dllName, EntryPoint = "_Z16samplePoseMaskedPKvS0_PfPKmfh")]
 #else
             [DllImport(dllName, EntryPoint = "samplePoseMasked")]
@@ -489,7 +489,7 @@ namespace AclUnity
                 samplePoseMaskedBlendedFirstNative(compressedTransformTracks, compressedScaleTracks, aosOutputBuffer, mask, blendFactor, time, keyframeInterpolationMode);
             }
 
-#if UNITY_ANDROID && UNITY_64 && !UNITY_EDITOR
+#if UNITY_ANDROID && !UNITY_EDITOR
             [DllImport(dllName, EntryPoint = "_Z28samplePoseMaskedBlendedFirstPKvS0_PfPKmffh")]
 #else
             [DllImport(dllName, EntryPoint = "samplePoseMaskedBlendedFirst")]
@@ -513,7 +513,7 @@ namespace AclUnity
                 samplePoseMaskedBlendedAddNative(compressedTransformTracks, compressedScaleTracks, aosOutputBuffer, mask, blendFactor, time, keyframeInterpolationMode);
             }
 
-#if UNITY_ANDROID && UNITY_64 && !UNITY_EDITOR
+#if UNITY_ANDROID && !UNITY_EDITOR
             [DllImport(dllName, EntryPoint = "_Z26samplePoseMaskedBlendedAddPKvS0_PfPKmffh")]
 #else
             [DllImport(dllName, EntryPoint = "samplePoseMaskedBlendedAdd")]
@@ -563,7 +563,7 @@ namespace AclUnity
                 sampleFloatsMaskedNative(compressedFloatTracks, floatOutputBuffer, mask, time, keyframeInterpolationMode);
             }
 
-#if UNITY_ANDROID && UNITY_64 && !UNITY_EDITOR
+#if UNITY_ANDROID && !UNITY_EDITOR
             [DllImport(dllName, EntryPoint = "_Z18sampleFloatsMaskedPKvPfPKmfh")]
 #else
             [DllImport(dllName, EntryPoint = "sampleFloatsMasked")]
@@ -584,7 +584,7 @@ namespace AclUnity
                 sampleFloatsMaskedBlendedFirstNative(compressedFloatTracks, floatOutputBuffer, mask, blendFactor, time, keyframeInterpolationMode);
             }
 
-#if UNITY_ANDROID && UNITY_64 && !UNITY_EDITOR
+#if UNITY_ANDROID && !UNITY_EDITOR
             [DllImport(dllName, EntryPoint = "_Z30sampleFloatsMaskedBlendedFirstPKvPfPKmffh")]
 #else
             [DllImport(dllName, EntryPoint = "sampleFloatsMaskedBlendedFirst")]
@@ -606,7 +606,7 @@ namespace AclUnity
                 sampleFloatsMaskedBlendedAddNative(compressedFloatTracks, floatOutputBuffer, mask, blendFactor, time, keyframeInterpolationMode);
             }
 
-#if UNITY_ANDROID && UNITY_64 && !UNITY_EDITOR
+#if UNITY_ANDROID && !UNITY_EDITOR
             [DllImport(dllName, EntryPoint = "_Z28sampleFloatsMaskedBlendedAddPKvPfPKmffh")]
 #else
             [DllImport(dllName, EntryPoint = "sampleFloatsMaskedBlendedAdd")]
