@@ -456,31 +456,75 @@ namespace AclUnity
                                                            float time,
                                                            byte keyframeInterpolationMode);
 
-            [DllImport(dllName)]
-            public static extern void samplePoseMasked(void*  compressedTransformTracks,
-                                                       void*  compressedScaleTracks,
-                                                       float* aosOutputBuffer,
-                                                       ulong* mask,
-                                                       float time,
-                                                       byte keyframeInterpolationMode);
+            public static void samplePoseMasked(void*  compressedTransformTracks,
+                                                void*  compressedScaleTracks,
+                                                float* aosOutputBuffer,
+                                                ulong* mask,
+                                                float time,
+                                                byte keyframeInterpolationMode)
+            {
+                samplePoseMaskedNative(compressedTransformTracks, compressedScaleTracks, aosOutputBuffer, mask, time, keyframeInterpolationMode);
+            }
 
-            [DllImport(dllName)]
-            public static extern void samplePoseMaskedBlendedFirst(void*  compressedTransformTracks,
-                                                                   void*  compressedScaleTracks,
-                                                                   float* aosOutputBuffer,
-                                                                   ulong* mask,
-                                                                   float blendFactor,
-                                                                   float time,
-                                                                   byte keyframeInterpolationMode);
+#if UNITY_ANDROID && UNITY_64 && !UNITY_EDITOR
+            [DllImport(dllName, EntryPoint = "_Z16samplePoseMaskedPKvS0_PfPKmfh")]
+#else
+            [DllImport(dllName, EntryPoint = "samplePoseMasked")]
+#endif
+            static extern void samplePoseMaskedNative(void*  compressedTransformTracks,
+                                                      void*  compressedScaleTracks,
+                                                      float* aosOutputBuffer,
+                                                      ulong* mask,
+                                                      float time,
+                                                      byte keyframeInterpolationMode);
 
-            [DllImport(dllName)]
-            public static extern void samplePoseMaskedBlendedAdd(void*  compressedTransformTracks,
-                                                                 void*  compressedScaleTracks,
-                                                                 float* aosOutputBuffer,
-                                                                 ulong* mask,
-                                                                 float blendFactor,
-                                                                 float time,
-                                                                 byte keyframeInterpolationMode);
+            public static void samplePoseMaskedBlendedFirst(void*  compressedTransformTracks,
+                                                            void*  compressedScaleTracks,
+                                                            float* aosOutputBuffer,
+                                                            ulong* mask,
+                                                            float blendFactor,
+                                                            float time,
+                                                            byte keyframeInterpolationMode)
+            {
+                samplePoseMaskedBlendedFirstNative(compressedTransformTracks, compressedScaleTracks, aosOutputBuffer, mask, blendFactor, time, keyframeInterpolationMode);
+            }
+
+#if UNITY_ANDROID && UNITY_64 && !UNITY_EDITOR
+            [DllImport(dllName, EntryPoint = "_Z28samplePoseMaskedBlendedFirstPKvS0_PfPKmffh")]
+#else
+            [DllImport(dllName, EntryPoint = "samplePoseMaskedBlendedFirst")]
+#endif
+            static extern void samplePoseMaskedBlendedFirstNative(void*  compressedTransformTracks,
+                                                                  void*  compressedScaleTracks,
+                                                                  float* aosOutputBuffer,
+                                                                  ulong* mask,
+                                                                  float blendFactor,
+                                                                  float time,
+                                                                  byte keyframeInterpolationMode);
+
+            public static void samplePoseMaskedBlendedAdd(void*  compressedTransformTracks,
+                                                          void*  compressedScaleTracks,
+                                                          float* aosOutputBuffer,
+                                                          ulong* mask,
+                                                          float blendFactor,
+                                                          float time,
+                                                          byte keyframeInterpolationMode)
+            {
+                samplePoseMaskedBlendedAddNative(compressedTransformTracks, compressedScaleTracks, aosOutputBuffer, mask, blendFactor, time, keyframeInterpolationMode);
+            }
+
+#if UNITY_ANDROID && UNITY_64 && !UNITY_EDITOR
+            [DllImport(dllName, EntryPoint = "_Z26samplePoseMaskedBlendedAddPKvS0_PfPKmffh")]
+#else
+            [DllImport(dllName, EntryPoint = "samplePoseMaskedBlendedAdd")]
+#endif
+            static extern void samplePoseMaskedBlendedAddNative(void*  compressedTransformTracks,
+                                                                void*  compressedScaleTracks,
+                                                                float* aosOutputBuffer,
+                                                                ulong* mask,
+                                                                float blendFactor,
+                                                                float time,
+                                                                byte keyframeInterpolationMode);
 
             [DllImport(dllName)]
             public static extern void sampleBone(void*  compressedTransformTracks,
@@ -510,28 +554,69 @@ namespace AclUnity
                                                              float time,
                                                              byte keyframeInterpolationMode);
 
-            [DllImport(dllName)]
-            public static extern void sampleFloatsMasked(void*  compressedFloatTracks,
-                                                         float* floatOutputBuffer,
-                                                         ulong* mask,
-                                                         float time,
-                                                         byte keyframeInterpolationMode);
+            public static void sampleFloatsMasked(void*  compressedFloatTracks,
+                                                 float* floatOutputBuffer,
+                                                 ulong* mask,
+                                                 float time,
+                                                 byte keyframeInterpolationMode)
+            {
+                sampleFloatsMaskedNative(compressedFloatTracks, floatOutputBuffer, mask, time, keyframeInterpolationMode);
+            }
 
-            [DllImport(dllName)]
-            public static extern void sampleFloatsMaskedBlendedFirst(void*  compressedFloatTracks,
-                                                                     float* floatOutputBuffer,
-                                                                     ulong* mask,
-                                                                     float blendFactor,
-                                                                     float time,
-                                                                     byte keyframeInterpolationMode);
+#if UNITY_ANDROID && UNITY_64 && !UNITY_EDITOR
+            [DllImport(dllName, EntryPoint = "_Z18sampleFloatsMaskedPKvPfPKmfh")]
+#else
+            [DllImport(dllName, EntryPoint = "sampleFloatsMasked")]
+#endif
+            static extern void sampleFloatsMaskedNative(void*  compressedFloatTracks,
+                                                        float* floatOutputBuffer,
+                                                        ulong* mask,
+                                                        float time,
+                                                        byte keyframeInterpolationMode);
 
-            [DllImport(dllName)]
-            public static extern void sampleFloatsMaskedBlendedAdd(void*  compressedFloatTracks,
-                                                                   float* floatOutputBuffer,
-                                                                   ulong* mask,
-                                                                   float blendFactor,
-                                                                   float time,
-                                                                   byte keyframeInterpolationMode);
+            public static void sampleFloatsMaskedBlendedFirst(void*  compressedFloatTracks,
+                                                             float* floatOutputBuffer,
+                                                             ulong* mask,
+                                                             float blendFactor,
+                                                             float time,
+                                                             byte keyframeInterpolationMode)
+            {
+                sampleFloatsMaskedBlendedFirstNative(compressedFloatTracks, floatOutputBuffer, mask, blendFactor, time, keyframeInterpolationMode);
+            }
+
+#if UNITY_ANDROID && UNITY_64 && !UNITY_EDITOR
+            [DllImport(dllName, EntryPoint = "_Z30sampleFloatsMaskedBlendedFirstPKvPfPKmffh")]
+#else
+            [DllImport(dllName, EntryPoint = "sampleFloatsMaskedBlendedFirst")]
+#endif
+            static extern void sampleFloatsMaskedBlendedFirstNative(void*  compressedFloatTracks,
+                                                                    float* floatOutputBuffer,
+                                                                    ulong* mask,
+                                                                    float blendFactor,
+                                                                    float time,
+                                                                    byte keyframeInterpolationMode);
+
+            public static void sampleFloatsMaskedBlendedAdd(void*  compressedFloatTracks,
+                                                           float* floatOutputBuffer,
+                                                           ulong* mask,
+                                                           float blendFactor,
+                                                           float time,
+                                                           byte keyframeInterpolationMode)
+            {
+                sampleFloatsMaskedBlendedAddNative(compressedFloatTracks, floatOutputBuffer, mask, blendFactor, time, keyframeInterpolationMode);
+            }
+
+#if UNITY_ANDROID && UNITY_64 && !UNITY_EDITOR
+            [DllImport(dllName, EntryPoint = "_Z28sampleFloatsMaskedBlendedAddPKvPfPKmffh")]
+#else
+            [DllImport(dllName, EntryPoint = "sampleFloatsMaskedBlendedAdd")]
+#endif
+            static extern void sampleFloatsMaskedBlendedAddNative(void*  compressedFloatTracks,
+                                                                  float* floatOutputBuffer,
+                                                                  ulong* mask,
+                                                                  float blendFactor,
+                                                                  float time,
+                                                                  byte keyframeInterpolationMode);
 
             [DllImport(dllName)]
             public static extern float sampleFloat(void* compressedFloatTracks,
