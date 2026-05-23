@@ -152,20 +152,17 @@ namespace Latios.Myri
             void SampleMismatchedRateLooped(ThreadStackAllocator tsa, ref AudioClipBlob clip, double clipStart, double clipSampleStride, bool isRightChannel, float weight,
                                             Span<float> output)
             {
-                var clipLengthInOutputSamples = clip.sampleCountPerChannel * clipSampleStride;
                 while (clipStart < 0.0)
                 {
                     clipStart += clip.sampleCountPerChannel;
                 }
                 clipStart %= clip.sampleCountPerChannel;
-                if (clipStart + output.Length * clipSampleStride + 1 < clipLengthInOutputSamples)
+                if (clipStart + output.Length * clipSampleStride + 1 < clip.sampleCountPerChannel)
                 {
-                    // No wrapping.
                     SampleMismatchedRateOneshot(tsa, ref clip, clipStart, clipSampleStride, isRightChannel, weight, output);
                     return;
                 }
 
-                // Wrapping is tricky. Creating a temporary buffer to fill with matched rate sampling, so that we have a contiguous array of samples to interpolate.
                 var       firstInputSample = (int)clipStart;
                 var       lastInputSample  = (int)math.ceil(clipStart + output.Length * clipSampleStride);
                 var       inputSampleCount = lastInputSample - firstInputSample + 2;  // Give us a little padding
@@ -194,6 +191,9 @@ namespace Latios.Myri
                 int remainingOutputSamples = math.min(output.Length, math.select(0, remainingClipSamples, remainingClipSamples > 0));
                 int inputSampleCount       = remainingOutputSamples - outputStartIndex;
                 int inputSampleStart       = math.max(clipStart, 0);
+                if (inputSampleCount <= 0)
+                    return;
+
                 var context                = new CodecContext
                 {
                     sampleRate           = frameState.Value.format.sampleRate,
@@ -234,11 +234,13 @@ namespace Latios.Myri
                 var inputSampleEnd         = (int)math.ceil(clipStart + clipSampleStride * (sampleCount - 1));
                 if (inputSampleEnd >= clip.sampleCountPerChannel)
                 {
-                    // Floating point precision wasn't quite clean. Remove a sample to get us back in range.
                     inputSampleEnd--;
                     sampleCount--;
                 }
                 var inputSampleCount = inputSampleEnd - inputSampleStart + 1;
+                if (sampleCount <= 0 || inputSampleCount <= 1)
+                    return;
+
                 var context          = new CodecContext
                 {
                     sampleRate           = frameState.Value.format.sampleRate,
