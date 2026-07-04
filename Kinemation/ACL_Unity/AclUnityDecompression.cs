@@ -467,7 +467,7 @@ namespace AclUnity
             }
 
 #if UNITY_ANDROID && !UNITY_EDITOR
-            [DllImport(dllName, EntryPoint = "_Z16samplePoseMaskedPKvS0_PfPKmfh")]
+            [DllImport(dllName, EntryPoint = "samplePoseMasked")]
 #else
             [DllImport(dllName, EntryPoint = "samplePoseMasked")]
 #endif
@@ -490,7 +490,7 @@ namespace AclUnity
             }
 
 #if UNITY_ANDROID && !UNITY_EDITOR
-            [DllImport(dllName, EntryPoint = "_Z28samplePoseMaskedBlendedFirstPKvS0_PfPKmffh")]
+            [DllImport(dllName, EntryPoint = "samplePoseMaskedBlendedFirst")]
 #else
             [DllImport(dllName, EntryPoint = "samplePoseMaskedBlendedFirst")]
 #endif
@@ -514,7 +514,7 @@ namespace AclUnity
             }
 
 #if UNITY_ANDROID && !UNITY_EDITOR
-            [DllImport(dllName, EntryPoint = "_Z26samplePoseMaskedBlendedAddPKvS0_PfPKmffh")]
+            [DllImport(dllName, EntryPoint = "samplePoseMaskedBlendedAdd")]
 #else
             [DllImport(dllName, EntryPoint = "samplePoseMaskedBlendedAdd")]
 #endif
