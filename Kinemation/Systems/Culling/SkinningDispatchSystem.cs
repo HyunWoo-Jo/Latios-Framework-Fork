@@ -79,7 +79,7 @@ namespace Latios.Kinemation.Systems
             state.RequireForUpdate(m_skeletonQuery);
             state.RequireForUpdate(m_skinnedMeshQuery);
 
-            m_batchSkinningKernelIndex = UnityEngine.SystemInfo.maxComputeWorkGroupSizeX < 1024 ? 1 : 0;
+            m_batchSkinningKernelIndex = UnityEngine.SystemInfo.maxComputeWorkGroupSizeX >= 512 ? 1 : 2;
             m_batchSkinningShader      = latiosWorld.latiosWorld.LoadFromResourcesAndPreserve<UnityEngine.ComputeShader>("BatchSkinning");
             m_expansionShader          = latiosWorld.latiosWorld.LoadFromResourcesAndPreserve<UnityEngine.ComputeShader>("SkeletonMeshExpansion");
             m_meshSkinningShader       = latiosWorld.latiosWorld.LoadFromResourcesAndPreserve<UnityEngine.ComputeShader>("MeshSkinning");
@@ -280,14 +280,14 @@ namespace Latios.Kinemation.Systems
 
             //UnityEngine.Debug.Log($"Vertex Skinning Buffer size: {requiredDeformSizes.maxRequiredBoneTransformsForVertexSkinning}");
 
-            m_batchSkinningShader.SetBuffer(0, _dstTransforms,          shaderTransformsBuffer);
-            m_batchSkinningShader.SetBuffer(0, _dstVertices,            shaderDeformBuffer);
-            m_batchSkinningShader.SetBuffer(0, _srcVertices,            graphicsBroker.GetMeshVerticesBuffer());
-            m_batchSkinningShader.SetBuffer(0, _boneWeights,            graphicsBroker.GetMeshWeightsBufferRO());
-            m_batchSkinningShader.SetBuffer(0, _bindPoses,              graphicsBroker.GetMeshBindPosesBufferRO());
-            m_batchSkinningShader.SetBuffer(0, _boneOffsets,            graphicsBroker.GetBoneOffsetsBufferRO());
-            m_batchSkinningShader.SetBuffer(0, _metaBuffer,             skinningMetaBuffer);
-            m_batchSkinningShader.SetBuffer(0, _skeletonQvvsTransforms, boneTransformsBuffer);
+            m_batchSkinningShader.SetBuffer(m_batchSkinningKernelIndex, _dstTransforms,          shaderTransformsBuffer);
+            m_batchSkinningShader.SetBuffer(m_batchSkinningKernelIndex, _dstVertices,            shaderDeformBuffer);
+            m_batchSkinningShader.SetBuffer(m_batchSkinningKernelIndex, _srcVertices,            graphicsBroker.GetMeshVerticesBuffer());
+            m_batchSkinningShader.SetBuffer(m_batchSkinningKernelIndex, _boneWeights,            graphicsBroker.GetMeshWeightsBufferRO());
+            m_batchSkinningShader.SetBuffer(m_batchSkinningKernelIndex, _bindPoses,              graphicsBroker.GetMeshBindPosesBufferRO());
+            m_batchSkinningShader.SetBuffer(m_batchSkinningKernelIndex, _boneOffsets,            graphicsBroker.GetBoneOffsetsBufferRO());
+            m_batchSkinningShader.SetBuffer(m_batchSkinningKernelIndex, _metaBuffer,             skinningMetaBuffer);
+            m_batchSkinningShader.SetBuffer(m_batchSkinningKernelIndex, _skeletonQvvsTransforms, boneTransformsBuffer);
 
             for (int dispatchesRemaining = (int)layouts.batchSkinningHeadersCount, offset = 0; dispatchesRemaining > 0;)
             {
