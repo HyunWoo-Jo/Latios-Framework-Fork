@@ -364,7 +364,10 @@ namespace Latios
             static void PlaybackOnThread(InstantiateCommandBufferUntyped icb, EntityManager em)
             {
                 // Step 1: Get the prefabs and sort keys
-                int count              = icb.Count();
+                int count = icb.Count();
+                if (count == 0)
+                    return;
+
                 var prefabSortkeyArray = new NativeArray<PrefabSortkey>(count, Allocator.Temp, NativeArrayOptions.UninitializedMemory);
                 icb.m_prefabSortkeyBlockList->GetElementValues(prefabSortkeyArray);
                 // Step 2: Get the component and command data pointers
@@ -502,17 +505,19 @@ namespace Latios
                 NativeList<Entity> toDestroy  = default;
                 for (int i = 0; i < icb.m_state->commandFunctions.Length; i++)
                 {
-                    var context = new IInstantiateCommand.Context
+                    var commandSize = icb.m_state->typesSizes[icb.m_state->typesWithData.Length + i];
+                    var context     = new IInstantiateCommand.Context
                     {
                         entityManager        = em,
                         entities             = instantiatedEntities,
                         commandOffset        = commandOffset,
                         dataPtrs             = sortedDataPtrs,
-                        expectedSize         = icb.m_state->typesSizes[icb.m_state->typesWithData.Length + i],
+                        expectedSize         = commandSize,
                         requestToDestroyList = toDestroy,
                     };
                     icb.m_state->commandFunctions[i].Invoke(ref context);
-                    toDestroy = context.requestToDestroyList;
+                    toDestroy      = context.requestToDestroyList;
+                    commandOffset += commandSize;
                 }
                 if (toDestroy.IsCreated)
                     em.DestroyEntity(toDestroy.AsArray());
