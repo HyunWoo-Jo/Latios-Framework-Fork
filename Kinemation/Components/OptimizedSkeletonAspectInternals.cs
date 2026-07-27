@@ -222,9 +222,10 @@ namespace Latios.Kinemation
             {
                 if (rootTransforms[i].context32 > 0)
                 {
-                    var rootTransform         = rootTransforms[i];
-                    var socketHandle          = m_worldTransform.transformAspect.entityInHierarchyHandle.GetFromIndexInHierarchy(rootTransform.context32);
-                    var socketTransform       = m_worldTransform.transformAspect[socketHandle];
+                    var rootTransform = rootTransforms[i];
+                    var socketHandle  = m_worldTransform.transformAspect.entityInHierarchyHandle.GetFromIndexInHierarchy(rootTransform.context32);
+                    if (!m_worldTransform.transformAspect.TryGetAspect(in socketHandle, out var socketTransform))
+                        continue;
                     rootTransform.context32   = socketTransform.worldTransform.context32;
                     commands[commandsWritten] = TransformBatchWriteCommand.SetLocalTransformQvvs(socketTransform, in rootTransform);
                     commandsWritten++;
@@ -398,8 +399,9 @@ namespace Latios.Kinemation
 #if !LATIOS_TRANSFORMS_UNITY
                 if (socketTransformHierarchyIndex < 0)
                     return;
-                var handle             = referenceTransformAspect.entityInHierarchyHandle.GetFromIndexInHierarchy(socketTransformHierarchyIndex);
-                var socket             = referenceTransformAspect[handle];
+                var handle = referenceTransformAspect.entityInHierarchyHandle.GetFromIndexInHierarchy(socketTransformHierarchyIndex);
+                if (!referenceTransformAspect.TryGetAspect(in handle, out var socket))
+                    return;
                 transform.context32    = socket.context32;
                 commands[commandCount] = TransformBatchWriteCommand.SetLocalTransformQvvs(socket, in transform);
                 commandCount++;
@@ -411,8 +413,9 @@ namespace Latios.Kinemation
 #if !LATIOS_TRANSFORMS_UNITY
                 if (socketTransformHierarchyIndex < 0)
                     return;
-                var handle             = referenceTransformAspect.entityInHierarchyHandle.GetFromIndexInHierarchy(socketTransformHierarchyIndex);
-                var socket             = referenceTransformAspect[handle];
+                var handle = referenceTransformAspect.entityInHierarchyHandle.GetFromIndexInHierarchy(socketTransformHierarchyIndex);
+                if (!referenceTransformAspect.TryGetAspect(in handle, out var socket))
+                    return;
                 commands[commandCount] = TransformBatchWriteCommand.SetLocalPosition(socket, position);
                 commandCount++;
 #endif
@@ -423,8 +426,9 @@ namespace Latios.Kinemation
 #if !LATIOS_TRANSFORMS_UNITY
                 if (socketTransformHierarchyIndex < 0)
                     return;
-                var handle             = referenceTransformAspect.entityInHierarchyHandle.GetFromIndexInHierarchy(socketTransformHierarchyIndex);
-                var socket             = referenceTransformAspect[handle];
+                var handle = referenceTransformAspect.entityInHierarchyHandle.GetFromIndexInHierarchy(socketTransformHierarchyIndex);
+                if (!referenceTransformAspect.TryGetAspect(in handle, out var socket))
+                    return;
                 commands[commandCount] = TransformBatchWriteCommand.SetLocalRotation(socket, rotation);
                 commandCount++;
 #endif
@@ -436,7 +440,8 @@ namespace Latios.Kinemation
                 if (socketTransformHierarchyIndex < 0)
                     return;
                 var handle = referenceTransformAspect.entityInHierarchyHandle.GetFromIndexInHierarchy(socketTransformHierarchyIndex);
-                var socket = referenceTransformAspect[handle];
+                if (!referenceTransformAspect.TryGetAspect(in handle, out var socket))
+                    return;
                 // Todo: Switch to explicit position-rotation command when that is supported.
                 var localScale         = socket.localScale;
                 commands[commandCount] = TransformBatchWriteCommand.SetLocalTransform(socket, new TransformQvs(position, rotation, localScale));
@@ -449,8 +454,9 @@ namespace Latios.Kinemation
 #if !LATIOS_TRANSFORMS_UNITY
                 if (socketTransformHierarchyIndex < 0)
                     return;
-                var handle             = referenceTransformAspect.entityInHierarchyHandle.GetFromIndexInHierarchy(socketTransformHierarchyIndex);
-                var socket             = referenceTransformAspect[handle];
+                var handle = referenceTransformAspect.entityInHierarchyHandle.GetFromIndexInHierarchy(socketTransformHierarchyIndex);
+                if (!referenceTransformAspect.TryGetAspect(in handle, out var socket))
+                    return;
                 commands[commandCount] = TransformBatchWriteCommand.SetLocalScale(socket, scale);
                 commandCount++;
 #endif
@@ -462,7 +468,8 @@ namespace Latios.Kinemation
                 if (socketTransformHierarchyIndex < 0)
                     return;
                 var handle = referenceTransformAspect.entityInHierarchyHandle.GetFromIndexInHierarchy(socketTransformHierarchyIndex);
-                var socket = referenceTransformAspect[handle];
+                if (!referenceTransformAspect.TryGetAspect(in handle, out var socket))
+                    return;
                 // Todo: Switch to explicit position-scale command when that is supported.
                 var localRotation      = socket.localRotation;
                 commands[commandCount] = TransformBatchWriteCommand.SetLocalTransform(socket, new TransformQvs(position, localRotation, scale));
@@ -475,8 +482,9 @@ namespace Latios.Kinemation
 #if !LATIOS_TRANSFORMS_UNITY
                 if (socketTransformHierarchyIndex < 0)
                     return;
-                var handle             = referenceTransformAspect.entityInHierarchyHandle.GetFromIndexInHierarchy(socketTransformHierarchyIndex);
-                var socket             = referenceTransformAspect[handle];
+                var handle = referenceTransformAspect.entityInHierarchyHandle.GetFromIndexInHierarchy(socketTransformHierarchyIndex);
+                if (!referenceTransformAspect.TryGetAspect(in handle, out var socket))
+                    return;
                 commands[commandCount] = TransformBatchWriteCommand.SetStretch(socket, stretch);
                 commandCount++;
 #endif

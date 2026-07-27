@@ -8,7 +8,6 @@ using Unity.Collections.LowLevel.Unsafe;
 using Unity.Entities;
 using Unity.Jobs.LowLevel.Unsafe;
 using UnityEngine;
-using UnityEngine.Networking;
 using UnityEngine.TextCore.LowLevel;
 
 using Font = Latios.Calligraphics.HarfBuzz.Font;
@@ -183,7 +182,7 @@ namespace Latios.Calligraphics.Systems
                                     case AxisTag.SLANT:
                                         variableFontLookupKey.slant = coord; break;
                                 }
-                                //Debug.Log($"Add FontLookupKey {tempFontLookupKey} for variation axis: {axisInfo.axisTag} {face.GetName(axisInfo.nameID, language)}, value = {coord}");
+                                //Debug.Log($"Add FontLookupKey {variableFontLookupKey} for variation axis: {axisInfo.axisTag} {face.GetName(axisInfo.nameID, language)}, value = {coord}");
                             }
                             fontTable.fontLookupKeyToNamedVariationIndexMap.Add(variableFontLookupKey, k);
                         }
@@ -211,7 +210,9 @@ namespace Latios.Calligraphics.Systems
             using (var request = UnityWebRequest.Get(source))
             {
                 request.SendWebRequest();
-                while (!request.isDone) { }
+                while (!request.isDone)
+                {
+                }
                 if (request.result != UnityWebRequest.Result.Success)
                 {
                     Debug.LogError($"Calligraphics: failed to read '{source}': {request.error}");
@@ -219,7 +220,7 @@ namespace Latios.Calligraphics.Systems
                     return false;
                 }
                 var nativeData = request.downloadHandler.nativeData;
-                byte* ptr = (byte*)nativeData.GetUnsafeReadOnlyPtr();
+                byte* ptr        = (byte*)nativeData.GetUnsafeReadOnlyPtr();
                 blob = new Blob(ptr, (uint)nativeData.Length, MemoryMode.DUBLICATE);
                 return true;
             }

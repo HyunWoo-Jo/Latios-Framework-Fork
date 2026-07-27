@@ -207,7 +207,7 @@ namespace Latios.Transforms
         /// <summary>
         /// The context32 whose purpose is up to the user
         /// </summary>
-        public int worldIndex => worldTransform.context32;
+        public int context32 => worldTransform.context32;
 
         /// <summary>
         /// The unit forward vector (local Z+) of the entity in world-space
@@ -258,6 +258,15 @@ namespace Latios.Transforms
     }
 
     /// <summary>
+    /// The embedded EntityInHierarchy local ticked data from the previous tick
+    /// </summary>
+    public struct TickedPreviousLocalTransformCache : IComponentData
+    {
+        internal float3 position;
+        internal float  scale;
+    }
+
+    /// <summary>
     /// The TickedWorldTransform from two ticks ago. This may be read for gameplay purposes.
     /// </summary>
     public struct TickedTwoAgoTransform : IComponentData
@@ -270,6 +279,11 @@ namespace Latios.Transforms
         public float3 stretch => worldTransform.stretch;
         public float3 nonUniformScale => scale * stretch;
     }
+
+    /// <summary>
+    /// Add this tag to an entity to have it automatically interpolate its local transform between current and previous ticked transforms.
+    /// </summary>
+    public struct InterpolateLocalTransformTag : IComponentData { }
     #endregion
 
     #region Flags

@@ -63,6 +63,17 @@ namespace Latios.Transforms
                                                        bool isTicked)
         {
             var (pos, scale) = ReadLocal(in childHandle, isTicked);
+            return GetLocalTransformRO(in parent, in child, in parentHandle, in childHandle, pos, scale);
+        }
+
+        public static TransformQvs GetLocalTransformRO(in TransformQvvs parent,
+                                                       in TransformQvvs child,
+                                                       in EntityInHierarchyHandle parentHandle,
+                                                       in EntityInHierarchyHandle childHandle,
+                                                       float3 localPosition,
+                                                       float localScale)
+        {
+            var (pos, scale) = (localPosition, localScale);
             var rot          = math.normalize(math.mul(math.conjugate(parent.rotation), child.rotation));
             if (parentHandle.indexInHierarchy != childHandle.bloodParent.indexInHierarchy)
             {
@@ -425,6 +436,27 @@ namespace Latios.Transforms
                 var newScale = qvvs.InverseTransformScale(in newParent, scale);
                 scale        = math.select(scale, newScale, math.isfinite(newScale));
             }
+        }
+
+        public static void CopyLocal(in EntityInHierarchyHandle handle, bool normalToTicked)
+        {
+            (var position, var scale) = ReadLocal(in handle, !normalToTicked);
+            WriteLocal(in handle, normalToTicked, position, scale);
+        }
+
+        public static TickedPreviousLocalTransformCache CopyTickedLocalToCache(in EntityInHierarchyHandle handle)
+        {
+            (var position, var scale) = ReadLocal(in handle, true);
+            return new TickedPreviousLocalTransformCache
+            {
+                position = position,
+                scale    = scale
+            };
+        }
+
+        public static void RestoreFromTickedLocalCache(in EntityInHierarchyHandle handle, in TickedPreviousLocalTransformCache cache)
+        {
+            WriteLocal(in handle, true, cache.position, cache.scale);
         }
 
         static (float3, float) ReadLocal(in EntityInHierarchyHandle handle, bool isTicked)

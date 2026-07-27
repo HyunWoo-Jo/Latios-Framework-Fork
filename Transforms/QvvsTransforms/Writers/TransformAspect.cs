@@ -1,5 +1,4 @@
 #if !LATIOS_TRANSFORMS_UNITY
-
 using System.Diagnostics;
 using Unity.Collections.LowLevel.Unsafe;
 using Unity.Entities;
@@ -418,6 +417,20 @@ namespace Latios.Transforms
         public EntityInHierarchyHandle entityInHierarchyHandle => m_handle;
 
         /// <summary>
+        /// Retrieves the read-only form of this TransformAspect. The read-only form can be used in
+        /// methods that require it, or to read other transforms in the hierarchy without dirtying
+        /// change filters.
+        /// </summary>
+        public TransformReadAspect asRO => new TransformReadAspect
+        {
+            m_access         = m_access,
+            m_accessType     = m_accessType,
+            m_handle         = m_handle,
+            m_esil           = m_esil,
+            m_worldTransform = (RefRO<WorldTransform>)m_worldTransform
+        };
+
+        /// <summary>
         /// Retrieves the TransformAspect for the specified handle belonging to the same hierarchy
         /// as this TransformAspect. When safety checks exist, this method throws if the specifed
         /// handle comes from another hierarchy or if either its handle or this TransformAspect's
@@ -451,6 +464,41 @@ namespace Latios.Transforms
                 CheckWorldTransformIsValid(in result.m_worldTransform);
                 return result;
             }
+        }
+        /// <summary>
+        /// Attempts to retrieve the TransformAspect for the specified handle belonging to the same
+        /// hierarchy as this TransformAspect. When safety checks exist, this method throws if the
+        /// specifed handle comes from another hierarchy. This method returns false if the transform
+        /// is not present.
+        /// </summary>
+        public bool TryGetAspect(in EntityInHierarchyHandle otherHandle, out TransformAspect otherTransformAspect)
+        {
+            CheckBelongsToSameHierarchy(in otherHandle);
+            var result      = this;
+            result.m_handle = otherHandle;
+            switch (m_accessType)
+            {
+                case AccessType.EntityManager:
+                    if (((EntityManager*)m_access)->HasComponent<WorldTransform>(otherHandle.entity))
+                        result.m_worldTransform = ((EntityManager*)m_access)->GetComponentDataRW<WorldTransform>(otherHandle.entity);
+                    else
+                        result.m_worldTransform = default;
+                    break;
+                case AccessType.ComponentBroker:
+                    result.m_worldTransform = ((ComponentBroker*)m_access)->GetRW<WorldTransform>(otherHandle.entity);
+                    break;
+                case AccessType.ComponentBrokerKeyed:
+                    result.m_worldTransform = ((ComponentBroker*)m_access)->GetRWIgnoreParallelSafety<WorldTransform>(otherHandle.entity);
+                    break;
+                case AccessType.ComponentLookup:
+                    ((ComponentLookup<WorldTransform>*)m_access)->TryGetRefRW(otherHandle.entity, out result.m_worldTransform);
+                    break;
+                default:
+                    result.m_worldTransform = default;
+                    break;
+            }
+            otherTransformAspect = result;
+            return result.m_worldTransform.IsValid;
         }
         /// <summary>
         /// True if the entity has a parent and not a CopyParent inheritance flag.
