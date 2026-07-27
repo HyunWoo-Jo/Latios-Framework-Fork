@@ -8,8 +8,6 @@ using Unity.Entities;
 using Unity.Jobs;
 using Unity.Mathematics;
 
-using static Unity.Entities.SystemAPI;
-
 namespace Latios.Kinemation.Systems
 {
     // This system must update before TransformInitializeSuperSystem, because sockets rely on this before the
@@ -19,7 +17,7 @@ namespace Latios.Kinemation.Systems
     [RequireMatchingQueriesForUpdate]
     [DisableAutoCreation]
     [BurstCompile]
-    public partial struct InitializeAnimatedBuffersSystem : ISystem
+    public partial struct InitializeAnimatedBuffersSystem : ISystem, ILatiosApi
     {
         EntityQuery m_initSkeletonsQuery;
         EntityQuery m_initBlendShapesQuery;
@@ -27,6 +25,7 @@ namespace Latios.Kinemation.Systems
 
         public void OnCreate(ref SystemState state)
         {
+            this.OnCreateForLatios(ref state);
             m_initSkeletonsQuery = state.Fluent().With<OptimizedSkeletonState>(true).With<OptimizedBoneTransform>(false)
                                    .With<OptimizedSkeletonHierarchyBlobReference>(true).IncludeDisabledEntities().Build();
             m_initBlendShapesQuery   = state.Fluent().With<BlendShapeState>(true).With<BlendShapeWeight>(false).With<BoundMesh>(true).Build();
@@ -36,31 +35,22 @@ namespace Latios.Kinemation.Systems
         [BurstCompile]
         public void OnUpdate(ref SystemState state)
         {
+            var api                = this.GetApi(ref state);
             var lastSystemVersion = state.LastSystemVersion;
             var skeletonJh        = new InitSkeletonJob
             {
                 lastSystemVersion = lastSystemVersion,
-                blobHandle        = GetComponentTypeHandle<OptimizedSkeletonHierarchyBlobReference>(true),
-                bonesReadHandle   = GetBufferTypeHandle<OptimizedBoneTransform>(true),
-                bonesWriteHandle  = GetBufferTypeHandle<OptimizedBoneTransform>(false),
-                stateHandle       = GetComponentTypeHandle<OptimizedSkeletonState>(false),
-            }.ScheduleParallel(m_initSkeletonsQuery, state.Dependency);
+            }.Inject(api).ScheduleParallel(m_initSkeletonsQuery, state.Dependency);
 
             var blendShapeJh = new InitBlendShapesJob
             {
-                lastSystemVersion  = lastSystemVersion,
-                blobHandle         = GetComponentTypeHandle<BoundMesh>(true),
-                weightsReadHandle  = GetBufferTypeHandle<BlendShapeWeight>(true),
-                weightsWriteHandle = GetBufferTypeHandle<BlendShapeWeight>(false)
-            }.ScheduleParallel(m_initBlendShapesQuery, state.Dependency);
+                lastSystemVersion = lastSystemVersion,
+            }.Inject(api).ScheduleParallel(m_initBlendShapesQuery, state.Dependency);
 
             var meshJh = new InitMeshJob
             {
-                lastSystemVersion   = lastSystemVersion,
-                blobHandle          = GetComponentTypeHandle<BoundMesh>(true),
-                verticesReadHandle  = GetBufferTypeHandle<DynamicMeshVertex>(true),
-                verticesWriteHandle = GetBufferTypeHandle<DynamicMeshVertex>(false)
-            }.ScheduleParallel(m_initDynamicMeshesQuery, state.Dependency);
+                lastSystemVersion = lastSystemVersion,
+            }.Inject(api).ScheduleParallel(m_initDynamicMeshesQuery, state.Dependency);
 
             state.Dependency = JobHandle.CombineDependencies(skeletonJh, blendShapeJh, meshJh);
         }
@@ -70,12 +60,11 @@ namespace Latios.Kinemation.Systems
 #else
         [BurstCompile]
 #endif
-        struct InitSkeletonJob : IJobChunk
+        partial struct InitSkeletonJob : IJobChunk, IInjectable
         {
-            public BufferTypeHandle<OptimizedBoneTransform>                                                     bonesWriteHandle;
-            public ComponentTypeHandle<OptimizedSkeletonState>                                                  stateHandle;
-            [ReadOnly, NativeDisableContainerSafetyRestriction] public BufferTypeHandle<OptimizedBoneTransform> bonesReadHandle;
-            [ReadOnly] public ComponentTypeHandle<OptimizedSkeletonHierarchyBlobReference>                      blobHandle;
+            [Inject] BufferTypeHandle<OptimizedBoneTransform>                                bonesHandle;
+            [Inject] ComponentTypeHandle<OptimizedSkeletonState>                             stateHandle;
+            [ReadOnly, Inject] ComponentTypeHandle<OptimizedSkeletonHierarchyBlobReference> blobHandle;
 
             public uint lastSystemVersion;
 
@@ -85,7 +74,7 @@ namespace Latios.Kinemation.Systems
                     return;
 
                 var  blobs      = chunk.GetNativeArray(ref blobHandle);
-                var  bones      = chunk.GetBufferAccessor(ref bonesReadHandle);
+                var  bones      = chunk.GetBufferAccessorRO(ref bonesHandle);
                 bool needsWrite = false;
 
                 // Much more likely for there to be a new entity at the end of a chunk.
@@ -101,7 +90,7 @@ namespace Latios.Kinemation.Systems
                 if (!needsWrite)
                     return;
 
-                bones      = chunk.GetBufferAccessor(ref bonesWriteHandle);
+                bones      = chunk.GetBufferAccessorRW(ref bonesHandle);
                 var states = chunk.GetNativeArray(ref stateHandle);
                 for (int i = 0; i < chunk.Count; i++)
                 {
@@ -149,11 +138,10 @@ namespace Latios.Kinemation.Systems
         }
 
         [BurstCompile]
-        struct InitBlendShapesJob : IJobChunk
+        partial struct InitBlendShapesJob : IJobChunk, IInjectable
         {
-            public BufferTypeHandle<BlendShapeWeight>                                                     weightsWriteHandle;
-            [ReadOnly, NativeDisableContainerSafetyRestriction] public BufferTypeHandle<BlendShapeWeight> weightsReadHandle;
-            [ReadOnly] public ComponentTypeHandle<BoundMesh>                                              blobHandle;
+            [Inject] BufferTypeHandle<BlendShapeWeight>        weightsHandle;
+            [ReadOnly, Inject] ComponentTypeHandle<BoundMesh> blobHandle;
 
             public uint lastSystemVersion;
 
@@ -163,7 +151,7 @@ namespace Latios.Kinemation.Systems
                     return;
 
                 var  blobs      = chunk.GetNativeArray(ref blobHandle);
-                var  weights    = chunk.GetBufferAccessor(ref weightsReadHandle);
+                var  weights    = chunk.GetBufferAccessorRO(ref weightsHandle);
                 bool needsWrite = false;
 
                 for (int i = chunk.Count - 1; i >= 0; i--)
@@ -178,7 +166,7 @@ namespace Latios.Kinemation.Systems
                 if (!needsWrite)
                     return;
 
-                weights = chunk.GetBufferAccessor(ref weightsWriteHandle);
+                weights = chunk.GetBufferAccessorRW(ref weightsHandle);
 
                 for (int i = 0; i < chunk.Count; i++)
                 {
@@ -207,11 +195,10 @@ namespace Latios.Kinemation.Systems
         }
 
         [BurstCompile]
-        struct InitMeshJob : IJobChunk
+        partial struct InitMeshJob : IJobChunk, IInjectable
         {
-            public BufferTypeHandle<DynamicMeshVertex>                                                     verticesWriteHandle;
-            [ReadOnly, NativeDisableContainerSafetyRestriction] public BufferTypeHandle<DynamicMeshVertex> verticesReadHandle;
-            [ReadOnly] public ComponentTypeHandle<BoundMesh>                                               blobHandle;
+            [Inject] BufferTypeHandle<DynamicMeshVertex>       verticesHandle;
+            [ReadOnly, Inject] ComponentTypeHandle<BoundMesh> blobHandle;
 
             public uint lastSystemVersion;
 
@@ -221,7 +208,7 @@ namespace Latios.Kinemation.Systems
                     return;
 
                 var  blobs      = chunk.GetNativeArray(ref blobHandle);
-                var  vertices   = chunk.GetBufferAccessor(ref verticesReadHandle);
+                var  vertices   = chunk.GetBufferAccessorRO(ref verticesHandle);
                 bool needsWrite = false;
 
                 for (int i = chunk.Count - 1; i >= 0; i--)
@@ -236,7 +223,7 @@ namespace Latios.Kinemation.Systems
                 if (!needsWrite)
                     return;
 
-                vertices = chunk.GetBufferAccessor(ref verticesWriteHandle);
+                vertices = chunk.GetBufferAccessorRW(ref verticesHandle);
 
                 for (int i = 0; i < chunk.Count; i++)
                 {

@@ -57,7 +57,7 @@ namespace Latios.Transforms
     /// The second phase groups the chunks together that share hierarchy members. The last phase
     /// is when TransformAspects can be safely iterated and processed.
     /// </summary>
-    public unsafe struct TransformAspectParallelChunkHandle
+    public unsafe struct TransformAspectParallelChunkHandle : ILatiosApiGettable
     {
         /* Construct Snippet
            new TransformAspectParallelChunkHandle(SystemAPI.GetComponentLookup<WorldTransform>(false),
@@ -105,6 +105,20 @@ namespace Latios.Transforms
             cache                     = null;
             hierarchyChecker          = default;
             cleanupChecker            = default;
+        }
+
+        void ILatiosApiGettable.CreateForApi(ref SystemState state)
+        {
+            transformLookup     = state.GetComponentLookup<WorldTransform>();
+            rootReferenceHandle = state.GetComponentTypeHandle<RootReference>(true);
+            hierarchyLookup     = state.GetBufferLookup<EntityInHierarchy>(true);
+            cleanupLookup       = state.GetBufferLookup<EntityInHierarchyCleanup>(true);
+            esil                = state.GetEntityStorageInfoLookup();
+        }
+
+        void ILatiosApiGettable.UpdateForApi(ref SystemState state)
+        {
+            this = new TransformAspectParallelChunkHandle(transformLookup.lookup, rootReferenceHandle, hierarchyLookup, cleanupLookup, esil, ref state);
         }
 
         /// <summary>
@@ -179,6 +193,7 @@ namespace Latios.Transforms
                     handle.currentCapturedChunkIndex = handle.chunkRanges[parallelForIndex].x + i;
                     chunkJob.Execute(in chunk, unfilteredChunkIndex, useEnabledMask, in chunkEnabledMask);
                 }
+                handle.ApplyDeferredTransforms();
             }
         }
         #endregion
@@ -300,6 +315,22 @@ namespace Latios.Transforms
         }
 
         /// <summary>
+        /// Access to the TransformDeferableAspect at the specified index of the currently active chunk.
+        /// Use this when you want to batch writes to multiple transforms in a hierarchy from an IJobEntity or IJobChunk.
+        /// </summary>
+        public TransformDeferableAspect Deferable(int indexInChunk)
+        {
+            var transform = this[indexInChunk];
+            if (!cache->deferredCommands.IsCreated)
+                cache->deferredCommands = new NativeList<TransformBatchWriteCommand>(Allocator.Temp);
+            return new TransformDeferableAspect
+            {
+                transform = transform,
+                commands  = cache->deferredCommands,
+            };
+        }
+
+        /// <summary>
         /// Gets the TransformsKey associated with hierarchy the entity at the specified index in the chunk belongs to
         /// </summary>
         public TransformsKey GetTransformsKey(int indexInChunk)
@@ -321,6 +352,34 @@ namespace Latios.Transforms
                 default:
                     return default;
             }
+        }
+
+        /// <summary>
+        /// Adds a deferred command for future playback. Deferred commands are played back in hierarchy order.
+        /// Refer to ApplyDeferredTransforms() for more details.
+        /// </summary>
+        /// <param name="command"></param>
+        public void AddDeferredCommand(in TransformBatchWriteCommand command)
+        {
+            CheckInit();
+            if (!cache->deferredCommands.IsCreated)
+                cache->deferredCommands = new NativeList<TransformBatchWriteCommand>(Allocator.Temp);
+            cache->deferredCommands.Add(command);
+        }
+
+        /// <summary>
+        /// Applies all pending deferred commands created by calls to AddDeferredCommand or from
+        /// TransformDeferableAspects within hierarchies.
+        /// If using IJobParallelForDefer, you should call this yourself. If using IJobChunk or IJobEntity,
+        /// this will be automatically called after each batch, though you can call it yourself at any time
+        /// to get an up-to-date state of all transforms.
+        /// </summary>
+        public void ApplyDeferredTransforms()
+        {
+            if (cache == null || !cache->deferredCommands.IsCreated)
+                return; // We never started a chunk, so there can't be any commands.
+            cache->deferredCommands.ApplyTransforms();
+            cache->deferredCommands.Clear();
         }
 
         /// <summary>
@@ -363,6 +422,11 @@ namespace Latios.Transforms
             currentCapturedChunkIndex = range.x + chunkIndexInGroup;
             SetupChunk(chunks[currentCapturedChunkIndex]);
         }
+
+        /// <summary>
+        /// Access to the EntityStorageInfoLookup for convenience
+        /// </summary>
+        public EntityStorageInfoLookup entityStorageInfoLookup => esil;
         #endregion
 
         #region Impl
@@ -393,6 +457,7 @@ namespace Latios.Transforms
             public BufferTypeHandle<EntityInHierarchyCleanup> entityInHierarchyCleanupHandle;
             public BufferAccessor<EntityInHierarchyCleanup>   entityInHierarchyCleanupAccessor;
             public NativeArray<RootReference>                 rootReferences;
+            public NativeList<TransformBatchWriteCommand>     deferredCommands;
             public ArchetypeChunk                             chunk;
             public Role                                       role;
         }
@@ -408,12 +473,12 @@ namespace Latios.Transforms
         bool                             didFirstCaptureChunk;
         AllocatorManager.AllocatorHandle allocator;
 
-        TransformsComponentLookup<WorldTransform>            transformLookup;
-        [ReadOnly] BufferLookup<EntityInHierarchy>           hierarchyLookup;
-        [ReadOnly] BufferLookup<EntityInHierarchyCleanup>    cleanupLookup;
-        [ReadOnly] public ComponentTypeHandle<RootReference> rootReferenceHandle;
-        [ReadOnly] EntityStorageInfoLookup                   esil;
-        [NativeDisableUnsafePtrRestriction] ThreadCache*     cache;
+        TransformsComponentLookup<WorldTransform>         transformLookup;
+        [ReadOnly] BufferLookup<EntityInHierarchy>        hierarchyLookup;
+        [ReadOnly] BufferLookup<EntityInHierarchyCleanup> cleanupLookup;
+        [ReadOnly] ComponentTypeHandle<RootReference>     rootReferenceHandle;
+        [ReadOnly] EntityStorageInfoLookup                esil;
+        [NativeDisableUnsafePtrRestriction] ThreadCache*  cache;
 
         HasChecker<EntityInHierarchy>        hierarchyChecker;
         HasChecker<EntityInHierarchyCleanup> cleanupChecker;
@@ -426,6 +491,7 @@ namespace Latios.Transforms
                 cache->transformHandle                = transformLookup.lookup.ToHandle(false);
                 cache->entityInHierarchyHandle        = hierarchyLookup.ToHandle(true);
                 cache->entityInHierarchyCleanupHandle = cleanupLookup.ToHandle(true);
+                cache->deferredCommands               = default;
             }
             cache->chunkTransforms = chunk.chunk.GetNativeArray(ref cache->transformHandle);
             if (chunk.role == Role.Solo)
@@ -486,7 +552,7 @@ namespace Latios.Transforms
         {
             if (cache == null)
                 throw new System.InvalidOperationException(
-                    "The TransformAccessParallelChunkHandle has not been set up. Use IJobEntityChunkBeginEnd or IJobChunk to pass in the current chunk to OnChunkBegin().");
+                    "The TransformAccessParallelChunkHandle has not been set up. Use IJobEntityChunkBeginEnd or IJobChunk to pass in the current chunk to OnChunkBegin(), or call SetActiveChunkForIJobParallelForDefer().");
         }
 
         [Conditional("ENABLE_UNITY_COLLECTIONS_CHECKS")]
