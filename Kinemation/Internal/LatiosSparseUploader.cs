@@ -648,7 +648,6 @@ namespace Latios.Kinemation.SparseUpload
 
         uint m_frameIndex;
         bool m_firstUpdate;
-        bool m_firstUpdateThisFrame;
 
         /// <summary>
         /// Constructs a new sparse uploader with the specified buffer as the target.
@@ -693,9 +692,8 @@ namespace Latios.Kinemation.SparseUpload
             m_RequestedUploadBufferPoolMaxSizeBytes = 0;
             m_PruneUploadBufferPool                 = false;
 
-            m_frameIndex           = 0;
-            m_firstUpdate          = true;
-            m_firstUpdateThisFrame = false;
+            m_frameIndex  = 0;
+            m_firstUpdate = true;
         }
 
         /// <summary>
@@ -730,7 +728,7 @@ namespace Latios.Kinemation.SparseUpload
             {
                 // Since we have no code such as Graphics.CopyBuffer(dst, src) currently
                 // we have to do this ourselves in a compute shader
-                var srcSize = m_DestinationBuffer.count * m_DestinationBuffer.stride;
+                var srcSizeInBytes = (ulong)m_DestinationBuffer.count * (ulong)m_DestinationBuffer.stride;
                 //m_SparseUploaderShader.SetBuffer(m_ReplaceKernelIndex, m_SrcBufferID, m_DestinationBuffer);
                 //m_SparseUploaderShader.SetBuffer(m_ReplaceKernelIndex, m_DstBufferID, buffer);
                 //m_SparseUploaderShader.SetInt(m_ReplaceOperationSize, srcSize);
@@ -739,10 +737,14 @@ namespace Latios.Kinemation.SparseUpload
 
                 m_copyBytesShader.SetBuffer(0, m_dst, buffer);
                 m_copyBytesShader.SetBuffer(0, m_src, m_DestinationBuffer);
-                uint threadGroupSize = 64;
-                for (uint dispatchesRemaining = ((uint)srcSize / 4 + threadGroupSize - 1) / threadGroupSize, start = 0; dispatchesRemaining > 0;)
+                uint threadGroupSize    = 64;
+                var  threadsRequired    = srcSizeInBytes / 4;
+                var  dispatchesRequired = threadsRequired / threadGroupSize;
+                if (threadsRequired % threadGroupSize != 0)
+                    dispatchesRequired++;
+                for (ulong dispatchesRemaining = dispatchesRequired, start = 0; dispatchesRemaining > 0;)
                 {
-                    uint dispatchCount = math.min(dispatchesRemaining, 65535);
+                    var dispatchCount = math.min(dispatchesRemaining, 65535);
                     m_copyBytesShader.SetInt(m_start, (int)(start * threadGroupSize));
                     m_copyBytesShader.Dispatch(0, (int)dispatchCount, 1, 1);
                     dispatchesRemaining -= dispatchCount;
@@ -853,7 +855,6 @@ namespace Latios.Kinemation.SparseUpload
             if (m_firstUpdate || frameID != m_frameIndex)
             {
                 RecoverBuffers();
-                m_firstUpdateThisFrame = true;
             }
             m_firstUpdate = false;
             m_frameIndex  = frameID;
@@ -942,10 +943,7 @@ namespace Latios.Kinemation.SparseUpload
                 return;
 
             FrameData frameData = default;
-            if (m_firstUpdateThisFrame)
-                frameData = (!m_FreeFrameData.IsEmpty) ? m_FreeFrameData.Pop() : new FrameData(Allocator.Persistent);
-            else
-                frameData = m_FrameData[m_FrameData.Length - 1];
+            frameData           = (!m_FreeFrameData.IsEmpty) ? m_FreeFrameData.Pop() : new FrameData(Allocator.Persistent);
             for (int iBuf = 0; iBuf < numBuffers; ++iBuf)
             {
                 var mappedBuffer = m_MappedBuffers[iBuf];
@@ -969,8 +967,7 @@ namespace Latios.Kinemation.SparseUpload
                 }
             }
 
-            if (m_firstUpdateThisFrame)
-                m_FrameData.Add(frameData);
+            m_FrameData.Add(frameData);
 
             if (m_MappedBuffers.IsCreated)
                 m_MappedBuffers.Dispose();

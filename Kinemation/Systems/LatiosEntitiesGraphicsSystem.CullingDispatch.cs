@@ -25,6 +25,12 @@ namespace Latios.Kinemation.Systems
     {
         static readonly ProfilerMarker m_latiosPerformCullingMarker = new ProfilerMarker("LatiosOnPerformCulling");
 
+        private void OnBeginRendering()
+        {
+            fixed (Unmanaged* unmanaged = &m_unmanaged)
+            DoOnBeginRendering(unmanaged);
+        }
+
         private JobHandle OnPerformCulling(BatchRendererGroup rendererGroup, BatchCullingContext batchCullingContext, BatchCullingOutput cullingOutput, IntPtr userContext)
         {
             if (m_unmanaged.m_needsFirstUpdate)
@@ -43,6 +49,12 @@ namespace Latios.Kinemation.Systems
                 else
                     return default;
             }
+        }
+
+        [BurstCompile]
+        static void DoOnBeginRendering(Unmanaged* unmanaged)
+        {
+            unmanaged->OnBeginRendering();
         }
 
         [BurstCompile]
@@ -69,6 +81,17 @@ namespace Latios.Kinemation.Systems
 
         partial struct Unmanaged
         {
+            public void OnBeginRendering()
+            {
+                var features = latiosWorld.worldBlackboardEntity.GetComponentData<EnableUpdatingInCustomGraphics>();
+                if (features.materialProperties)
+                    return;
+
+                var     wu     = latiosWorld.unityWorldUnmanaged;
+                ref var system = ref wu.GetUnsafeSystemRef<UploadMaterialPropertiesSystem>(wu.GetExistingUnmanagedSystem<UploadMaterialPropertiesSystem>());
+                system.UpdateInstanceBuffer(latiosWorld);
+            }
+
             public bool OnPerformCullingBegin(ref SystemState state,
                                               ref BatchCullingContext batchCullingContext,
                                               ref BatchCullingOutput cullingOutput,
@@ -86,6 +109,7 @@ namespace Latios.Kinemation.Systems
                 if (includeExcludeListFilter.IsIncludeEnabled && includeExcludeListFilter.IsIncludeEmpty)
                 {
                     includeExcludeListFilter.Dispose();
+                    cullingOutput.customCullingResult[0] = (IntPtr)(-1);
                     return false;
                 }
 
@@ -148,7 +172,7 @@ namespace Latios.Kinemation.Systems
             {
                 //UnityEngine.Debug.Log($"OnFinishedCulling pass {(int)customCullingResult}");
 
-                if (m_needsFirstUpdate || m_cullPassIndexThisFrame == m_cullPassIndexForLastDispatch)
+                if (m_needsFirstUpdate || m_cullPassIndexThisFrame == m_cullPassIndexForLastDispatch || (int)(customCullingResult) < 0)
                     return;
 
                 m_cullingDispatchSuperSystem.Update(state.WorldUnmanaged);
