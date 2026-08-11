@@ -576,26 +576,6 @@ namespace Latios.Systems
         }
 
         /// <summary>
-        /// Creates a new CustomCommandBuffer that will be played back by this system.
-        /// </summary>
-        public CustomCommandBuffer<T0> CreateCustomCommandBuffer<T0>() where T0 : unmanaged, ICustomCommand
-        {
-            var ccb = new CustomCommandBuffer<T0>(allocator);
-            AddCustomCommandBufferUntyped(ccb.m_customCommandBufferUntyped);
-            return ccb;
-        }
-
-        /// <summary>
-        /// Creates a new CustomCommandBuffer that will be played back by this system.
-        /// </summary>
-        public CustomCommandBuffer<T0, T1> CreateCustomCommandBuffer<T0, T1>() where T0 : unmanaged, ICustomCommand where T1 : unmanaged, ICustomCommand
-        {
-            var ccb = new CustomCommandBuffer<T0, T1>(allocator);
-            AddCustomCommandBufferUntyped(ccb.m_customCommandBufferUntyped);
-            return ccb;
-        }
-
-        /// <summary>
         /// Adds a JobHandle representing a job or set of jobs which write to a command buffer produced by this system.
         /// You do not need to call this method if the system is tracked by the LatiosWorld. However, calling this method
         /// inside a tracked system cancels automatic dependency propagation for that system for that update, which may be desirable.
