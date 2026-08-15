@@ -1,6 +1,8 @@
 using Unity.Burst;
+using Unity.Burst.Intrinsics;
 using Unity.Collections;
 using Unity.Entities;
+using Unity.Jobs;
 using Unity.Mathematics;
 
 namespace Latios.InternalSourceGen
@@ -93,6 +95,181 @@ namespace Latios.InternalSourceGen
             T result = default;
             result.__CreateForApi(ref state);
             return result;
+        }
+        #endregion
+
+        #region IJobEach
+        public static EntityQuery BuildJobEachQuery<T>(ref SystemState state) where T : struct, IJobEach
+        {
+            return default(T).__AppendToQuery(state.Fluent()).Build();
+        }
+
+        // Generated dispatch code lives in the user's assembly and so cannot reach the invoker's internals,
+        // but it needs Dependency, WorldUpdateAllocator, and CompleteDependency().
+        public static ref SystemState GetState<TSystem>(in LatiosApiInvoker<TSystem> api) where TSystem : unmanaged, ISystem, ILatiosApi
+        {
+            return ref *api.m_state;
+        }
+
+        public static void RunWithoutJobs<T>(ref T job, EntityQuery query) where T : struct, IJobChunk
+        {
+            Unity.Entities.Internal.InternalCompilerInterface.JobChunkInterface.RunByRefWithoutJobs(ref job, query);
+        }
+
+        // Messages must be constant strings to stay Burst-compatible, so the offending mode is named by
+        // branch rather than formatted. The job is identified by the stack frame in its generated dispatch.
+        [System.Diagnostics.Conditional("ENABLE_UNITY_COLLECTIONS_CHECKS"), System.Diagnostics.Conditional("UNITY_DOTS_DEBUG")]
+        public static void CheckScheduleModeSupported(IJobEach.ScheduleMode mode, IJobEach.ScheduleModeMask supported)
+        {
+            if ((supported & (IJobEach.ScheduleModeMask)(1 << (int)mode)) != 0)
+                return;
+
+            switch (mode)
+            {
+                case IJobEach.ScheduleMode.Run:
+                    throw new System.InvalidOperationException(
+                        "This IJobEach cannot be dispatched with Run(), because an Execute() parameter uses a handle which does not support that mode.");
+                case IJobEach.ScheduleMode.Schedule:
+                    throw new System.InvalidOperationException(
+                        "This IJobEach cannot be dispatched with Schedule(), because an Execute() parameter uses a handle which does not support that mode.");
+                case IJobEach.ScheduleMode.ScheduleParallel:
+                    throw new System.InvalidOperationException(
+                        "This IJobEach cannot be dispatched with ScheduleParallel(), because an Execute() parameter uses a handle which does not support that mode.");
+                default:
+                    throw new System.InvalidOperationException(
+                        "This IJobEach cannot be dispatched with RunImmediate(), because an Execute() parameter uses a handle which does not support that mode.");
+            }
+        }
+
+        public static IJobEach.JobContext CreateJobContext(in ArchetypeChunk chunk,
+                                                           int chunkIndexInQuery,
+                                                           bool useEnabledMask,
+                                                           in v128 chunkEnabledMask,
+                                                           uint lastSystemVersion,
+                                                           IJobEach.ScheduleMode mode,
+                                                           int firstEntityIndexInQuery)
+        {
+            return new IJobEach.JobContext
+            {
+                m_chunk              = chunk,
+                m_chunkEnabledMask   = chunkEnabledMask,
+                m_indexInChunk       = 0,
+                m_chunkIndexInQuery  = chunkIndexInQuery,
+                m_entityIndexInQuery = firstEntityIndexInQuery,
+                m_lastSystemVersion  = lastSystemVersion,
+                m_mode               = mode,
+                m_useEnabledMask     = useEnabledMask
+            };
+        }
+
+        public static int CountEntitiesInChunk(in ArchetypeChunk chunk, bool useEnabledMask, in v128 chunkEnabledMask)
+        {
+            return useEnabledMask ? (math.countbits(chunkEnabledMask.ULong0) + math.countbits(chunkEnabledMask.ULong1)) : chunk.Count;
+        }
+
+        // Generated code is emitted into user assemblies, which are not guaranteed to allow unsafe code, so
+        // the chunk data pointers are wrapped here rather than exposed as raw pointers to the emitter.
+        public struct ComponentPtr<T> where T : unmanaged, IComponentData
+        {
+            internal T* m_ptr;
+
+            public ref T this[int indexInChunk] => ref m_ptr[indexInChunk];
+        }
+
+        public struct EntityPtr
+        {
+            internal Entity* m_ptr;
+
+            public Entity this[int indexInChunk] => m_ptr[indexInChunk];
+        }
+
+        public static ComponentPtr<T> GetComponentPtrRO<T>(in ArchetypeChunk chunk, ref ComponentTypeHandle<T> handle) where T : unmanaged, IComponentData
+        {
+            return new ComponentPtr<T> { m_ptr = chunk.GetComponentDataPtrRO(ref handle) };
+        }
+
+        public static ComponentPtr<T> GetComponentPtrRW<T>(in ArchetypeChunk chunk, ref ComponentTypeHandle<T> handle) where T : unmanaged, IComponentData
+        {
+            return new ComponentPtr<T> { m_ptr = chunk.GetComponentDataPtrRW(ref handle) };
+        }
+
+        public static EntityPtr GetEntityPtr(in ArchetypeChunk chunk, EntityTypeHandle handle)
+        {
+            return new EntityPtr { m_ptr = chunk.GetEntityDataPtrRO(handle) };
+        }
+
+        // entityIndexInQuery counts matching entities, not chunk slots, so the caller supplies it directly
+        // rather than it being derived from indexInChunk. Pass -1 to mark it unavailable for the dispatch.
+        public static void SetJobContextEntity(ref IJobEach.JobContext context, int indexInChunk, int entityIndexInQuery)
+        {
+            context.m_indexInChunk       = indexInChunk;
+            context.m_entityIndexInQuery = entityIndexInQuery;
+        }
+
+        public static IJobEach.GroupContext CreateJobEachGroupContext(int groupIndex, int chunkCount, uint lastSystemVersion, IJobEach.ScheduleMode mode)
+        {
+            return new IJobEach.GroupContext
+            {
+                m_groupIndex        = groupIndex,
+                m_chunkCount        = chunkCount,
+                m_lastSystemVersion = lastSystemVersion,
+                m_mode              = mode
+            };
+        }
+
+        public static bool CallOnChunkBegin<T>(ref T job, in IJobEach.JobContext context) where T : struct, IJobEach
+        {
+            return job.OnChunkBegin(in context);
+        }
+
+        public static void CallOnChunkEnd<T>(ref T job, in IJobEach.JobContext context, bool wasChunkExecuted) where T : struct, IJobEach
+        {
+            job.OnChunkEnd(in context, wasChunkExecuted);
+        }
+
+        public static FluentQuery CallHandleAppendToQuery<THandle, TParameter>(FluentQuery query) where THandle : unmanaged,
+        IJobEach.IParameterHandle<TParameter> where TParameter : unmanaged, IJobEach.IParameter
+        {
+            THandle handle = default;
+            return handle.AppendToQuery(query);
+        }
+
+        public static bool CallHandleOnChunkBegin<THandle, TParameter>(ref THandle handle, in IJobEach.JobContext context) where THandle : unmanaged,
+        IJobEach.IParameterHandle<TParameter> where TParameter : unmanaged, IJobEach.IParameter
+        {
+            return handle.OnChunkBegin(in context);
+        }
+
+        public static void CallHandleOnChunkEnd<THandle, TParameter>(ref THandle handle, in IJobEach.JobContext context,
+                                                                     bool chunkWasExecuted) where THandle : unmanaged,
+        IJobEach.IParameterHandle<TParameter> where TParameter : unmanaged, IJobEach.IParameter
+        {
+            handle.OnChunkEnd(in context, chunkWasExecuted);
+        }
+
+        public static TParameter CallHandleGetParameter<THandle, TParameter>(ref THandle handle, in IJobEach.JobContext context) where THandle : unmanaged,
+        IJobEach.IParameterHandle<TParameter> where TParameter : unmanaged, IJobEach.IParameter
+        {
+            return handle.GetParameter(in context);
+        }
+
+        public static JobHandle CallHandleScheduleGroupUnions<THandle, TParameter>(ref THandle handle, IJobEach.ChunkGroupBuilder builder,
+                                                                                   JobHandle inputDeps) where THandle : unmanaged,
+        IJobEach.IGroupedParameterHandle<TParameter> where TParameter : unmanaged, IJobEach.IParameter
+        {
+            return handle.ScheduleGroupUnions(builder, inputDeps);
+        }
+
+        public static void CallHandleOnGroupBegin<THandle, TParameter>(ref THandle handle, in IJobEach.GroupContext groupContext) where THandle : unmanaged,
+        IJobEach.IGroupedParameterHandle<TParameter> where TParameter : unmanaged, IJobEach.IParameter
+        {
+            handle.OnGroupBegin(in groupContext);
+        }
+
+        public static void CallHandleOnGroupEnd<THandle, TParameter>(ref THandle handle, in IJobEach.GroupContext groupContext) where THandle : unmanaged,
+        IJobEach.IGroupedParameterHandle<TParameter> where TParameter : unmanaged, IJobEach.IParameter
+        {
+            handle.OnGroupEnd(in groupContext);
         }
         #endregion
     }
