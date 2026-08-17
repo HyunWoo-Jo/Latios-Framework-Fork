@@ -2,17 +2,19 @@ using System;
 using Unity.Collections;
 using Unity.Entities;
 using Unity.Mathematics;
+using Unity.Properties;
 
 namespace Latios.Unika
 {
     /// <summary>
     /// An untyped reference to another script, which must be resolved before use.
+    /// WARNING: CompareTo is NOT deterministic for scripts belonging to different entities!
     /// </summary>
     public unsafe struct ScriptRef : IEquatable<ScriptRef>, IComparable<ScriptRef>
     {
-        internal Entity m_entity;
-        internal int    m_instanceId;
-        internal int    m_cachedHeaderIndex;
+        [CreateProperty] internal Entity m_entity;
+        [CreateProperty] internal int    m_instanceId;
+        internal int                     m_cachedHeaderIndex;
 
         #region Main API
         /// <summary>

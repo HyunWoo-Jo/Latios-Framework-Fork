@@ -7,12 +7,14 @@ using Unity.Mathematics;
 
 namespace Latios.Transforms
 {
+    [IJobEach.ParameterHandle(typeof(TickedTransformAspectParameterHandle), IJobEach.ScheduleModeMask.All)]
+    [IJobEach.ParameterHandle(typeof(TickedTransformAspectRootHandle), IJobEach.ScheduleModeMask.All, typeof(RootOnlyAttribute))]
     [NativeContainer]
-    public unsafe struct TickedTransformAspect
+    public unsafe struct TickedTransformAspect : IJobEach.IParameter
     {
         internal RefRW<TickedWorldTransform> m_worldTransform;
         internal EntityInHierarchyHandle     m_handle;
-        internal void*                       m_access;
+        internal void*                       m_access;  // Stores Entity* if solo entity
         internal EntityStorageInfoLookup     m_esil;
         internal enum AccessType
         {
@@ -418,6 +420,22 @@ namespace Latios.Transforms
         public EntityInHierarchyHandle entityInHierarchyHandle => m_handle;
 
         /// <summary>
+        /// Retrieves a TransformsKey for the hierarchy this transform belongs to (or this entity).
+        /// </summary>
+        public TransformsKey transformsKey
+        {
+            get
+            {
+                Entity entity;
+                if (!entityInHierarchyHandle.isNull)
+                    entity = entityInHierarchyHandle.root.entity;
+                else
+                    entity = *(Entity*)m_access;
+                return TransformsKey.CreateFromExclusivelyAccessedRoot(entity, m_esil);
+            }
+        }
+
+        /// <summary>
         /// Retrieves the read-only form of this TickedTransformAspect. The read-only form can be used in
         /// methods that require it, or to read other transforms in the hierarchy without dirtying
         /// change filters.
@@ -729,6 +747,163 @@ namespace Latios.Transforms
             local.rotation          = math.normalize(math.mul(rotation, local.rotation));
             local.position         += pivotToNewPosition - pivotToOldPosition;
             localTransform          = local;
+        }
+
+        /// <summary>
+        /// Sets both the world-space position and rotation of the entity in a single operation.
+        /// If the entity has a parent, the localTransform and worldTransform are synchronized using the parent's TickedWorldTransform.
+        /// </summary>
+        /// <param name="worldPosition">The new world-space position to apply</param>
+        /// <param name="worldRotation">The new world-space rotation to apply</param>
+        public void SetWorldPositionAndRotation(float3 worldPosition, quaternion worldRotation)
+        {
+            if (m_handle.isNull)
+            {
+                ref var t  = ref m_worldTransform.ValueRW.worldTransform;
+                t.position = worldPosition;
+                t.rotation = worldRotation;
+            }
+            else
+            {
+                switch (m_accessType)
+                {
+                    case AccessType.EntityManager:
+                        TransformTools.SetTickedWorldPositionAndRotation(m_handle, worldPosition, worldRotation, *(EntityManager*)m_access);
+                        break;
+                    case AccessType.ComponentBroker:
+                        TransformTools.SetTickedWorldPositionAndRotation(m_handle, worldPosition, worldRotation, ref *(ComponentBroker*)m_access);
+                        break;
+                    case AccessType.ComponentBrokerKeyed:
+                        var key = TransformsKey.CreateFromExclusivelyAccessedRoot(m_handle.root.entity, m_esil);
+                        TransformTools.SetTickedWorldPositionAndRotation(m_handle, worldPosition, worldRotation, key,
+                                                                         ref *(
+                                                                             ComponentBroker*)m_access);
+                        break;
+                    case AccessType.ComponentLookup:
+                        TransformTools.SetTickedWorldPositionAndRotation(m_handle, worldPosition, worldRotation, ref *(ComponentLookup<TickedWorldTransform>*)m_access, ref m_esil);
+                        break;
+                }
+            }
+        }
+
+        /// <summary>
+        /// Sets both the local-space position and rotation of the entity relative to its parent in a single operation.
+        /// If the entity has a parent, the localTransform and worldTransform are synchronized using the parent's TickedWorldTransform.
+        /// If the entity does not have a parent, this is equivalent to SetWorldPositionAndRotation().
+        /// </summary>
+        /// <param name="localPosition">The new local-space position to apply</param>
+        /// <param name="localRotation">The new local-space rotation to apply</param>
+        public void SetLocalPositionAndRotation(float3 localPosition, quaternion localRotation)
+        {
+            if (m_handle.isNull)
+            {
+                ref var t  = ref m_worldTransform.ValueRW.worldTransform;
+                t.position = localPosition;
+                t.rotation = localRotation;
+            }
+            else
+            {
+                switch (m_accessType)
+                {
+                    case AccessType.EntityManager:
+                        TransformTools.SetTickedLocalPositionAndRotation(m_handle, localPosition, localRotation, *(EntityManager*)m_access);
+                        break;
+                    case AccessType.ComponentBroker:
+                        TransformTools.SetTickedLocalPositionAndRotation(m_handle, localPosition, localRotation, ref *(ComponentBroker*)m_access);
+                        break;
+                    case AccessType.ComponentBrokerKeyed:
+                        var key = TransformsKey.CreateFromExclusivelyAccessedRoot(m_handle.root.entity, m_esil);
+                        TransformTools.SetTickedLocalPositionAndRotation(m_handle, localPosition, localRotation, key,
+                                                                         ref *(
+                                                                             ComponentBroker*)m_access);
+                        break;
+                    case AccessType.ComponentLookup:
+                        TransformTools.SetTickedLocalPositionAndRotation(m_handle, localPosition, localRotation, ref *(ComponentLookup<TickedWorldTransform>*)m_access, ref m_esil);
+                        break;
+                }
+            }
+        }
+
+        /// <summary>
+        /// Moves and rotates the entity by the specified deltas in a single operation, where both the translation and the
+        /// axis of rotation are defined in world-space. This is equivalent to calling TranslateWorld() and RotateWorld()
+        /// separately, but propagates to children only once instead of twice.
+        /// If the entity has a parent, the localTransform and worldTransform are synchronized using the parent's TickedWorldTransform.
+        /// </summary>
+        /// <param name="translation">The world-space x, y, and z signed amounts to move the entity</param>
+        /// <param name="rotation">The amount to rotate by, where the innate axis of rotation of the quaternion is specified relative to world-space.</param>
+        public void TranslateRotateWorld(float3 translation, quaternion rotation)
+        {
+            if (m_handle.isNull)
+            {
+                ref var t   = ref m_worldTransform.ValueRW.worldTransform;
+                t.position += translation;
+                t.rotation  = math.normalize(math.mul(rotation, t.rotation));
+            }
+            else
+            {
+                switch (m_accessType)
+                {
+                    case AccessType.EntityManager:
+                        TransformTools.TranslateRotateTickedWorld(m_handle, translation, rotation, *(EntityManager*)m_access);
+                        break;
+                    case AccessType.ComponentBroker:
+                        TransformTools.TranslateRotateTickedWorld(m_handle, translation, rotation, ref *(ComponentBroker*)m_access);
+                        break;
+                    case AccessType.ComponentBrokerKeyed:
+                        var key = TransformsKey.CreateFromExclusivelyAccessedRoot(m_handle.root.entity, m_esil);
+                        TransformTools.TranslateRotateTickedWorld(m_handle,
+                                                                  translation,
+                                                                  rotation,
+                                                                  key,
+                                                                  ref *(ComponentBroker*)m_access);
+                        break;
+                    case AccessType.ComponentLookup:
+                        TransformTools.TranslateRotateTickedWorld(m_handle, translation, rotation, ref *(ComponentLookup<TickedWorldTransform>*)m_access, ref m_esil);
+                        break;
+                }
+            }
+        }
+
+        /// <summary>
+        /// Moves and rotates the entity by the specified deltas in a single operation, where both the translation and the
+        /// axis of rotation are defined in the entity's local-space axes relative to its parent. This is equivalent to calling
+        /// TranslateLocal() and RotateLocal() separately, but propagates to children only once instead of twice.
+        /// If the entity does not have a parent, this is equivalent to TranslateRotateWorld().
+        /// </summary>
+        /// <param name="translation">The local-space x, y, and z signed amounts to move the entity</param>
+        /// <param name="rotation">The amount to rotate by, where the innate axis of rotation of the quaternion is specified in the entity's local space relative to its parent.</param>
+        public void TranslateRotateLocal(float3 translation, quaternion rotation)
+        {
+            if (m_handle.isNull)
+            {
+                ref var t   = ref m_worldTransform.ValueRW.worldTransform;
+                t.position += translation;
+                t.rotation  = math.normalize(math.mul(rotation, t.rotation));
+            }
+            else
+            {
+                switch (m_accessType)
+                {
+                    case AccessType.EntityManager:
+                        TransformTools.TranslateRotateTickedLocal(m_handle, translation, rotation, *(EntityManager*)m_access);
+                        break;
+                    case AccessType.ComponentBroker:
+                        TransformTools.TranslateRotateTickedLocal(m_handle, translation, rotation, ref *(ComponentBroker*)m_access);
+                        break;
+                    case AccessType.ComponentBrokerKeyed:
+                        var key = TransformsKey.CreateFromExclusivelyAccessedRoot(m_handle.root.entity, m_esil);
+                        TransformTools.TranslateRotateTickedLocal(m_handle,
+                                                                  translation,
+                                                                  rotation,
+                                                                  key,
+                                                                  ref *(ComponentBroker*)m_access);
+                        break;
+                    case AccessType.ComponentLookup:
+                        TransformTools.TranslateRotateTickedLocal(m_handle, translation, rotation, ref *(ComponentLookup<TickedWorldTransform>*)m_access, ref m_esil);
+                        break;
+                }
+            }
         }
 
         /// <summary>

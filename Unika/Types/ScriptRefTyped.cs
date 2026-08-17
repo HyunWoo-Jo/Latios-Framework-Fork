@@ -2,11 +2,13 @@ using System;
 using Unity.Collections;
 using Unity.Entities;
 using Unity.Mathematics;
+using Unity.Properties;
 
 namespace Latios.Unika
 {
     /// <summary>
     /// A typed reference to another script, which must be resolved before use.
+    /// WARNING: CompareTo is NOT deterministic for scripts belonging to different entities!
     /// </summary>
     /// <typeparam name="T">The type of script referenced</typeparam>
     public unsafe struct ScriptRef<T> : IScriptRefTypedExtensionsApi,
@@ -14,9 +16,9 @@ namespace Latios.Unika
                                         IComparable<ScriptRef<T> >, IComparable<ScriptRef>
         where T : unmanaged, IUnikaScript, IUnikaScriptGen
     {
-        internal Entity m_entity;
-        internal int    m_instanceId;
-        internal int    m_cachedHeaderIndex;
+        [CreateProperty] internal Entity m_entity;
+        [CreateProperty] internal int    m_instanceId;
+        internal int                     m_cachedHeaderIndex;
 
         #region Main API
         /// <summary>

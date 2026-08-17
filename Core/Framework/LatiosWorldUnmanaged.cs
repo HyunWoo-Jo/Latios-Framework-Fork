@@ -66,6 +66,15 @@ namespace Latios
             }
         }
 
+        public WorldUnmanaged unityWorldUnmanaged
+        {
+            get
+            {
+                CheckHandleIsValid();
+                return m_impl->m_worldUnmanaged;
+            }
+        }
+
         /// <summary>
         /// True if live baking occurred for this update frame. This is set and cleared right after Unity's live baking systems update.
         /// This should always be false in builds.
@@ -867,7 +876,7 @@ namespace Latios
         public ref Systems.TickedSyncPointPlaybackSystem GetTickedSyncPoint()
         {
 #if ENABLE_UNITY_COLLECTIONS_CHECKS
-            if (m_syncPointPlaybackSystem == null)
+            if (m_tickedSyncPointPlaybackSystem == null)
                 throw new System.InvalidOperationException("No TickedSyncPointPlaybackSystem exists in the LatiosWorld. You may need to install ticking in the bootstrap.");
 #endif
             return ref *m_tickedSyncPointPlaybackSystem;

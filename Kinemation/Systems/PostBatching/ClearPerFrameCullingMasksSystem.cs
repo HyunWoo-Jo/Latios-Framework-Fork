@@ -24,7 +24,7 @@ namespace Latios.Kinemation.Systems
         [BurstCompile]
         public void OnUpdate(ref SystemState state)
         {
-            var api           = this.GetApi(ref state);
+            var api          = this.GetApi(ref state);
             state.Dependency = new ClearRenderJob
             {
                 lastSystemVersion = state.LastSystemVersion
@@ -41,7 +41,7 @@ namespace Latios.Kinemation.Systems
         {
             [Inject] ComponentTypeHandle<ChunkPerFrameCullingMask>    frameHandle;
             [Inject] ComponentTypeHandle<ChunkPerDispatchCullingMask> dispatchHandle;
-            public uint                                             lastSystemVersion;
+            public uint                                               lastSystemVersion;
 
             public unsafe void Execute(in ArchetypeChunk chunk, int unfilteredChunkIndex, bool useEnabledMask, in v128 chunkEnabledMask)
             {
@@ -70,3 +70,4 @@ namespace Latios.Kinemation.Systems
         }
     }
 }
+

@@ -117,6 +117,8 @@ namespace Latios.Kinemation
     public struct GraphicsBufferBroker : IDisposable, IComponentData
     {
         #region API
+        public const uint kMaxBufferSize = 1024 * 1024 * 1023;  // According to Unity, some GPUs can't allocate 1024 MB, but 1023 is fine.
+
         /// <summary>
         /// A runtime static handle to a particular persistent growable buffer or upload buffer pool.
         /// </summary>
@@ -265,17 +267,22 @@ namespace Latios.Kinemation
                 };
             }
 
-            public PersistentBuffer(uint initialSize,
+            public PersistentBuffer(ulong initialSize,
                                     uint stride,
                                     GraphicsBuffer.Target bufferType,
                                     UnityObjectRef<ComputeShader>          copyShader,
                                     NativeList<BufferQueuedForDestruction> destructionQueue)
             {
-                uint size          = math.ceilpow2(initialSize);
+                if (initialSize * stride > kMaxBufferSize)
+                {
+                    Debug.LogWarning("Attempted to allocate a persistent graphics buffer over 1 GB. Rendering artifacts may occur.");
+                    initialSize = 1024 * 1024 * 1024 / stride;
+                }
+                var size           = math.ceilpow2(initialSize);
                 m_currentBuffer    = new GraphicsBufferUnmanaged(bufferType, GraphicsBuffer.UsageFlags.None, (int)size, (int)stride);
                 m_copyShader       = copyShader;
                 m_destructionQueue = destructionQueue;
-                m_currentSize      = size;
+                m_currentSize      = (uint)size;
                 m_stride           = stride;
                 m_bindingTarget    = bufferType;
             }
@@ -290,19 +297,20 @@ namespace Latios.Kinemation
 
             public GraphicsBufferUnmanaged GetBufferNoResize() => m_currentBuffer;
 
-            public GraphicsBufferUnmanaged GetBuffer(uint requiredSize, uint frameId)
+            public GraphicsBufferUnmanaged GetBuffer(ulong requiredSize, uint frameId)
             {
                 //UnityEngine.Debug.Log($"Requested Persistent Buffer of size: {requiredSize} while currentSize is: {m_currentSize}");
                 if (requiredSize <= m_currentSize)
                     return m_currentBuffer;
 
-                uint size = math.ceilpow2(requiredSize);
-                if (requiredSize * m_stride > 1024 * 1024 * 1024)
+                if (requiredSize * m_stride > kMaxBufferSize)
+                {
                     Debug.LogWarning("Attempted to allocate a persistent graphics buffer over 1 GB. Rendering artifacts may occur.");
-                if (requiredSize * m_stride < 1024 * 1024 * 1024 && size * m_stride > 1024 * 1024 * 1024)
-                    size        = 1024 * 1024 * 1024 / m_stride;
-                var prevBuffer  = m_currentBuffer;
-                m_currentBuffer = new GraphicsBufferUnmanaged(m_bindingTarget, GraphicsBuffer.UsageFlags.None, (int)size, (int)m_stride);
+                    requiredSize = m_currentSize;
+                }
+                ulong size       = math.select(math.ceilpow2(requiredSize), kMaxBufferSize / m_stride, requiredSize * m_stride == kMaxBufferSize);
+                var   prevBuffer = m_currentBuffer;
+                m_currentBuffer  = new GraphicsBufferUnmanaged(m_bindingTarget, GraphicsBuffer.UsageFlags.None, (int)size, (int)m_stride);
                 if (m_copyShader.IsValid())
                 {
                     m_copyShader.GetKernelThreadGroupSizes(0, out var threadGroupSize, out _, out _);
@@ -319,7 +327,7 @@ namespace Latios.Kinemation
                         //UnityEngine.Debug.Log($"Dispatched buffer type: {m_bindingTarget} with dispatchCount: {dispatchCount}");
                     }
                 }
-                m_currentSize                                                  = size;
+                m_currentSize                                                  = (uint)size;
                 m_destructionQueue.Add(new BufferQueuedForDestruction { buffer = prevBuffer, frameId = frameId });
                 return m_currentBuffer;
             }
@@ -355,8 +363,14 @@ namespace Latios.Kinemation
 
             public bool valid => m_buffersInPool.IsCreated;
 
-            public GraphicsBufferUnmanaged GetBuffer(uint requiredSize, uint frameId)
+            public GraphicsBufferUnmanaged GetBuffer(ulong requiredSize, uint frameId)
             {
+                if (requiredSize * m_stride > kMaxBufferSize)
+                {
+                    Debug.LogWarning("Attempted to allocate a persistent graphics buffer over 1 GB. Rendering artifacts may occur.");
+                    requiredSize = kMaxBufferSize / m_stride;
+                }
+
                 for (int i = 0; i < m_buffersInPool.Length; i++)
                 {
                     if (m_buffersInPool[i].size >= requiredSize)
@@ -375,11 +389,11 @@ namespace Latios.Kinemation
                     m_buffersInPool.RemoveAtSwapBack(0);
                 }
 
-                uint size       = math.ceilpow2(requiredSize);
-                var  newTracked = new TrackedBuffer
+                var size       = math.ceilpow2(requiredSize);
+                var newTracked = new TrackedBuffer
                 {
                     buffer  = new GraphicsBufferUnmanaged(m_type, GraphicsBuffer.UsageFlags.LockBufferForWrite, (int)size, (int)m_stride),
-                    size    = size,
+                    size    = (uint)size,
                     frameId = frameId
                 };
                 m_buffersInFlight.Add(newTracked);

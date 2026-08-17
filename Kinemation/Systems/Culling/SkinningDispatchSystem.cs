@@ -15,7 +15,8 @@ using Unity.Mathematics;
 namespace Latios.Kinemation.Systems
 {
     [DisableAutoCreation]
-    public partial struct SkinningDispatchSystem : ISystem, ILatiosApi, ICullingComputeDispatchSystem<SkinningDispatchSystem.CollectState, SkinningDispatchSystem.WriteState>
+    public partial struct SkinningDispatchSystem : ISystem, ILatiosApi, ISystemShouldUpdate, ICullingComputeDispatchSystem<SkinningDispatchSystem.CollectState,
+                                                                                                                           SkinningDispatchSystem.WriteState>
     {
 #if UNITY_ANDROID
         // Android devices often have buggy drivers that struggle with groupshared memory.
@@ -99,20 +100,28 @@ namespace Latios.Kinemation.Systems
             _SkinMatrices                  = UnityEngine.Shader.PropertyToID("_SkinMatrices");
         }
 
-        [BurstCompile]
-        public void OnUpdate(ref SystemState state)
+        public unsafe bool ShouldUpdateSystem(ref SystemState state)
         {
-            var api          = this.GetApi(ref state);
+            fixed (SkinningDispatchSystem* system = &this)
+            return ShouldUpdate(ref state, system);
+        }
+
+        [BurstCompile]
+        static unsafe bool ShouldUpdate(ref SystemState state, SkinningDispatchSystem* system)
+        {
+            var api          = system->GetApi(ref state);
             var dispatchData = api.worldBlackboardEntity.GetComponentData<DispatchContext>();
             if (dispatchData.isCustomGraphicsDispatch)
             {
                 var features = api.worldBlackboardEntity.GetComponentData<EnableUpdatingInCustomGraphics>();
                 if (!features.skinning)
-                    return;
+                    return false;
             }
-
-            m_data.DoUpdate(ref state, ref this);
+            return true;
         }
+
+        [BurstCompile]
+        public void OnUpdate(ref SystemState state) => m_data.DoUpdate(ref state, ref this);
 
         public CollectState Collect(ref SystemState state)
         {
@@ -129,8 +138,11 @@ namespace Latios.Kinemation.Systems
             var groupedSkinningRequestsStartsAndCounts   = new NativeList<int2>(state.WorldUpdateAllocator);
             var groupedSkinningRequests                  = new NativeList<MeshSkinningRequest>(state.WorldUpdateAllocator);
             var skeletonEntityToSkinningRequestsGroupMap = new NativeHashMap<Entity, int>(1, state.WorldUpdateAllocator);
-            var bufferLayouts                            = new NativeReference<BufferLayouts>(state.WorldUpdateAllocator, NativeArrayOptions.UninitializedMemory);
-            var deformClassificationMap                  = api.worldBlackboardEntity.GetCollectionComponent<DeformClassificationMap>(true);
+            // If the jobs throw an exception, BufferLayouts could be left in a really bad state, that causes us to make bad allocation attempts against the GPU.
+            // Some graphics drivers completely crap out because of this. Unity doesn't always have safeguards either. So we need to protect the drivers.
+            // Thus we clear memory here rather than leave it uninitialized.
+            var bufferLayouts           = new NativeReference<BufferLayouts>(state.WorldUpdateAllocator, NativeArrayOptions.ClearMemory);
+            var deformClassificationMap = api.worldBlackboardEntity.GetCollectionComponent<DeformClassificationMap>(true);
 
             var collectJh = new FindMeshChunksNeedingSkinningJob
             {
@@ -182,8 +194,11 @@ namespace Latios.Kinemation.Systems
         public WriteState Write(ref SystemState state, ref CollectState collectState)
         {
             var layouts = collectState.layouts.Value;
-            if (layouts.requiredUploadTransforms == 0)
+            if (!layouts.isValid || layouts.requiredUploadTransforms == 0)
             {
+                if (!layouts.isValid)
+                    UnityEngine.Debug.LogError("An exception was thrown in a skinning job. Therefore, skinning will not be applied this dispatch pass.");
+
                 // skip rest of loop.
                 return default;
             }
@@ -464,6 +479,8 @@ namespace Latios.Kinemation.Systems
             public uint batchSkinningHeadersCount;
             public uint expansionHeadersCount;
             public uint meshSkinningCommandsCount;
+
+            public bool isValid;
         }
         #endregion
 
@@ -554,120 +571,141 @@ namespace Latios.Kinemation.Systems
                 if ((classification & DeformClassification.CurrentVertexMatrix) != DeformClassification.None)
                 {
                     var indices    = chunk.GetNativeArray(ref currentMatrixVertexHandle);
-                    var enumerator = new ChunkEntityEnumerator(true, new v128(lower, upper), chunk.Count);
-                    while (enumerator.NextEntityIndex(out int i))
+                    var enumerator = new ChunkEntityBatchEnumerator(true, new v128(lower, upper), chunk.Count);
+                    while (enumerator.NextRange(out var rangeStart, out var rangeCount))
                     {
-                        requestsBlockList.Write(new MeshSkinningRequestWithSkeletonTarget
+                        for (int i = rangeStart, rangeEnd = rangeStart + rangeCount; i < rangeEnd; i++)
                         {
-                            skeletonEntity = depsArray[i].root,
-                            request        = new MeshSkinningRequest
+                            requestsBlockList.Write(new MeshSkinningRequestWithSkeletonTarget
                             {
-                                indexInSkeletonBufferShaderUsageHigh8 = ((uint)MeshSkinningRequest.ShaderUsage.CurrentMatrixVertex << 24) | (uint)depsArray[i].indexInDependentSkinnedMeshesBuffer,
-                                shaderDstIndex                        = indices[i].firstMatrixIndex
-                            }
-                        }, m_nativeThreadIndex);
+                                skeletonEntity = depsArray[i].root,
+                                request        = new MeshSkinningRequest
+                                {
+                                    indexInSkeletonBufferShaderUsageHigh8 = ((uint)MeshSkinningRequest.ShaderUsage.CurrentMatrixVertex << 24) | (uint)depsArray[i].indexInDependentSkinnedMeshesBuffer,
+                                    shaderDstIndex                        = indices[i].firstMatrixIndex
+                                }
+                            }, m_nativeThreadIndex);
+                        }
                     }
                 }
                 else if ((classification & DeformClassification.LegacyLbs) != DeformClassification.None)
                 {
                     var indices    = chunk.GetNativeArray(ref legacyLbsHandle);
-                    var enumerator = new ChunkEntityEnumerator(true, new v128(lower, upper), chunk.Count);
-                    while (enumerator.NextEntityIndex(out int i))
+                    var enumerator = new ChunkEntityBatchEnumerator(true, new v128(lower, upper), chunk.Count);
+                    while (enumerator.NextRange(out var rangeStart, out var rangeCount))
                     {
-                        requestsBlockList.Write(new MeshSkinningRequestWithSkeletonTarget
+                        for (int i = rangeStart, rangeEnd = rangeStart + rangeCount; i < rangeEnd; i++)
                         {
-                            skeletonEntity = depsArray[i].root,
-                            request        = new MeshSkinningRequest
+                            requestsBlockList.Write(new MeshSkinningRequestWithSkeletonTarget
                             {
-                                indexInSkeletonBufferShaderUsageHigh8 = ((uint)MeshSkinningRequest.ShaderUsage.CurrentMatrixVertex << 24) | (uint)depsArray[i].indexInDependentSkinnedMeshesBuffer,
-                                shaderDstIndex                        = indices[i].firstMatrixIndex
-                            }
-                        }, m_nativeThreadIndex);
+                                skeletonEntity = depsArray[i].root,
+                                request        = new MeshSkinningRequest
+                                {
+                                    indexInSkeletonBufferShaderUsageHigh8 = ((uint)MeshSkinningRequest.ShaderUsage.CurrentMatrixVertex << 24) | (uint)depsArray[i].indexInDependentSkinnedMeshesBuffer,
+                                    shaderDstIndex                        = indices[i].firstMatrixIndex
+                                }
+                            }, m_nativeThreadIndex);
+                        }
                     }
                 }
                 if ((classification & DeformClassification.PreviousVertexMatrix) != DeformClassification.None)
                 {
                     var indices    = chunk.GetNativeArray(ref previousMatrixVertexHandle);
-                    var enumerator = new ChunkEntityEnumerator(true, new v128(lower, upper), chunk.Count);
-                    while (enumerator.NextEntityIndex(out int i))
+                    var enumerator = new ChunkEntityBatchEnumerator(true, new v128(lower, upper), chunk.Count);
+                    while (enumerator.NextRange(out var rangeStart, out var rangeCount))
                     {
-                        requestsBlockList.Write(new MeshSkinningRequestWithSkeletonTarget
+                        for (int i = rangeStart, rangeEnd = rangeStart + rangeCount; i < rangeEnd; i++)
                         {
-                            skeletonEntity = depsArray[i].root,
-                            request        = new MeshSkinningRequest
+                            requestsBlockList.Write(new MeshSkinningRequestWithSkeletonTarget
                             {
-                                indexInSkeletonBufferShaderUsageHigh8 = ((uint)MeshSkinningRequest.ShaderUsage.PreviousMatrixVertex << 24) | (uint)depsArray[i].indexInDependentSkinnedMeshesBuffer,
-                                shaderDstIndex                        = indices[i].firstMatrixIndex
-                            }
-                        }, m_nativeThreadIndex);
+                                skeletonEntity = depsArray[i].root,
+                                request        = new MeshSkinningRequest
+                                {
+                                    indexInSkeletonBufferShaderUsageHigh8 = ((uint)MeshSkinningRequest.ShaderUsage.PreviousMatrixVertex << 24) | (uint)depsArray[i].indexInDependentSkinnedMeshesBuffer,
+                                    shaderDstIndex                        = indices[i].firstMatrixIndex
+                                }
+                            }, m_nativeThreadIndex);
+                        }
                     }
                 }
                 if ((classification & DeformClassification.TwoAgoVertexMatrix) != DeformClassification.None)
                 {
                     var indices    = chunk.GetNativeArray(ref twoAgoMatrixVertexHandle);
-                    var enumerator = new ChunkEntityEnumerator(true, new v128(lower, upper), chunk.Count);
-                    while (enumerator.NextEntityIndex(out int i))
+                    var enumerator = new ChunkEntityBatchEnumerator(true, new v128(lower, upper), chunk.Count);
+                    while (enumerator.NextRange(out var rangeStart, out var rangeCount))
                     {
-                        requestsBlockList.Write(new MeshSkinningRequestWithSkeletonTarget
+                        for (int i = rangeStart, rangeEnd = rangeStart + rangeCount; i < rangeEnd; i++)
                         {
-                            skeletonEntity = depsArray[i].root,
-                            request        = new MeshSkinningRequest
+                            requestsBlockList.Write(new MeshSkinningRequestWithSkeletonTarget
                             {
-                                indexInSkeletonBufferShaderUsageHigh8 = ((uint)MeshSkinningRequest.ShaderUsage.TwoAgoMatrixVertex << 24) | (uint)depsArray[i].indexInDependentSkinnedMeshesBuffer,
-                                shaderDstIndex                        = indices[i].firstMatrixIndex
-                            }
-                        }, m_nativeThreadIndex);
+                                skeletonEntity = depsArray[i].root,
+                                request        = new MeshSkinningRequest
+                                {
+                                    indexInSkeletonBufferShaderUsageHigh8 = ((uint)MeshSkinningRequest.ShaderUsage.TwoAgoMatrixVertex << 24) | (uint)depsArray[i].indexInDependentSkinnedMeshesBuffer,
+                                    shaderDstIndex                        = indices[i].firstMatrixIndex
+                                }
+                            }, m_nativeThreadIndex);
+                        }
                     }
                 }
                 if ((classification & DeformClassification.CurrentVertexDqs) != DeformClassification.None)
                 {
                     var indices    = chunk.GetNativeArray(ref currentDqsVertexHandle);
-                    var enumerator = new ChunkEntityEnumerator(true, new v128(lower, upper), chunk.Count);
-                    while (enumerator.NextEntityIndex(out int i))
+                    var enumerator = new ChunkEntityBatchEnumerator(true, new v128(lower, upper), chunk.Count);
+                    while (enumerator.NextRange(out var rangeStart, out var rangeCount))
                     {
-                        requestsBlockList.Write(new MeshSkinningRequestWithSkeletonTarget
+                        for (int i = rangeStart, rangeEnd = rangeStart + rangeCount; i < rangeEnd; i++)
                         {
-                            skeletonEntity = depsArray[i].root,
-                            request        = new MeshSkinningRequest
+                            requestsBlockList.Write(new MeshSkinningRequestWithSkeletonTarget
                             {
-                                indexInSkeletonBufferShaderUsageHigh8 = ((uint)MeshSkinningRequest.ShaderUsage.CurrentDqsVertex << 24) | (uint)depsArray[i].indexInDependentSkinnedMeshesBuffer,
-                                shaderDstIndex                        = indices[i].firstDqsWorldIndex
-                            }
-                        }, m_nativeThreadIndex);
+                                skeletonEntity = depsArray[i].root,
+                                request        = new MeshSkinningRequest
+                                {
+                                    indexInSkeletonBufferShaderUsageHigh8 = ((uint)MeshSkinningRequest.ShaderUsage.CurrentDqsVertex << 24) | (uint)depsArray[i].indexInDependentSkinnedMeshesBuffer,
+                                    shaderDstIndex                        = indices[i].firstDqsWorldIndex
+                                }
+                            }, m_nativeThreadIndex);
+                        }
                     }
                 }
                 if ((classification & DeformClassification.PreviousVertexDqs) != DeformClassification.None)
                 {
                     var indices    = chunk.GetNativeArray(ref previousDqsVertexHandle);
-                    var enumerator = new ChunkEntityEnumerator(true, new v128(lower, upper), chunk.Count);
-                    while (enumerator.NextEntityIndex(out int i))
+                    var enumerator = new ChunkEntityBatchEnumerator(true, new v128(lower, upper), chunk.Count);
+                    while (enumerator.NextRange(out var rangeStart, out var rangeCount))
                     {
-                        requestsBlockList.Write(new MeshSkinningRequestWithSkeletonTarget
+                        for (int i = rangeStart, rangeEnd = rangeStart + rangeCount; i < rangeEnd; i++)
                         {
-                            skeletonEntity = depsArray[i].root,
-                            request        = new MeshSkinningRequest
+                            requestsBlockList.Write(new MeshSkinningRequestWithSkeletonTarget
                             {
-                                indexInSkeletonBufferShaderUsageHigh8 = ((uint)MeshSkinningRequest.ShaderUsage.PreviousDqsVertex << 24) | (uint)depsArray[i].indexInDependentSkinnedMeshesBuffer,
-                                shaderDstIndex                        = indices[i].firstDqsWorldIndex
-                            }
-                        }, m_nativeThreadIndex);
+                                skeletonEntity = depsArray[i].root,
+                                request        = new MeshSkinningRequest
+                                {
+                                    indexInSkeletonBufferShaderUsageHigh8 = ((uint)MeshSkinningRequest.ShaderUsage.PreviousDqsVertex << 24) | (uint)depsArray[i].indexInDependentSkinnedMeshesBuffer,
+                                    shaderDstIndex                        = indices[i].firstDqsWorldIndex
+                                }
+                            }, m_nativeThreadIndex);
+                        }
                     }
                 }
                 if ((classification & DeformClassification.TwoAgoVertexDqs) != DeformClassification.None)
                 {
                     var indices    = chunk.GetNativeArray(ref twoAgoDqsVertexHandle);
-                    var enumerator = new ChunkEntityEnumerator(true, new v128(lower, upper), chunk.Count);
-                    while (enumerator.NextEntityIndex(out int i))
+                    var enumerator = new ChunkEntityBatchEnumerator(true, new v128(lower, upper), chunk.Count);
+                    while (enumerator.NextRange(out var rangeStart, out var rangeCount))
                     {
-                        requestsBlockList.Write(new MeshSkinningRequestWithSkeletonTarget
+                        for (int i = rangeStart, rangeEnd = rangeStart + rangeCount; i < rangeEnd; i++)
                         {
-                            skeletonEntity = depsArray[i].root,
-                            request        = new MeshSkinningRequest
+                            requestsBlockList.Write(new MeshSkinningRequestWithSkeletonTarget
                             {
-                                indexInSkeletonBufferShaderUsageHigh8 = ((uint)MeshSkinningRequest.ShaderUsage.TwoAgoDqsVertex << 24) | (uint)depsArray[i].indexInDependentSkinnedMeshesBuffer,
-                                shaderDstIndex                        = indices[i].firstDqsWorldIndex
-                            }
-                        }, m_nativeThreadIndex);
+                                skeletonEntity = depsArray[i].root,
+                                request        = new MeshSkinningRequest
+                                {
+                                    indexInSkeletonBufferShaderUsageHigh8 = ((uint)MeshSkinningRequest.ShaderUsage.TwoAgoDqsVertex << 24) | (uint)depsArray[i].indexInDependentSkinnedMeshesBuffer,
+                                    shaderDstIndex                        = indices[i].firstDqsWorldIndex
+                                }
+                            }, m_nativeThreadIndex);
+                        }
                     }
                 }
                 bool vertsInDst = (classification & (DeformClassification.RequiresUploadDynamicMesh | DeformClassification.RequiresGpuComputeBlendShapes)) !=
@@ -676,115 +714,133 @@ namespace Latios.Kinemation.Systems
                 if ((classification & DeformClassification.CurrentDeform) != DeformClassification.None)
                 {
                     var indices     = chunk.GetNativeArray(ref currentDeformHandle);
-                    var enumerator  = new ChunkEntityEnumerator(true, new v128(lower, upper), chunk.Count);
+                    var enumerator  = new ChunkEntityBatchEnumerator(true, new v128(lower, upper), chunk.Count);
                     var usage       = isDqs ? MeshSkinningRequest.ShaderUsage.CurrentDqsDeform : MeshSkinningRequest.ShaderUsage.CurrentMatrixDeform;
                     usage          |= vertsInDst ? MeshSkinningRequest.ShaderUsage.UseVerticesInDst : usage;
-                    while (enumerator.NextEntityIndex(out int i))
+                    while (enumerator.NextRange(out var rangeStart, out var rangeCount))
                     {
-                        requestsBlockList.Write(new MeshSkinningRequestWithSkeletonTarget
+                        for (int i = rangeStart, rangeEnd = rangeStart + rangeCount; i < rangeEnd; i++)
                         {
-                            skeletonEntity = depsArray[i].root,
-                            request        = new MeshSkinningRequest
+                            requestsBlockList.Write(new MeshSkinningRequestWithSkeletonTarget
                             {
-                                indexInSkeletonBufferShaderUsageHigh8 = ((uint)usage << 24) | (uint)depsArray[i].indexInDependentSkinnedMeshesBuffer,
-                                shaderDstIndex                        = indices[i].firstVertexIndex
-                            }
-                        }, m_nativeThreadIndex);
+                                skeletonEntity = depsArray[i].root,
+                                request        = new MeshSkinningRequest
+                                {
+                                    indexInSkeletonBufferShaderUsageHigh8 = ((uint)usage << 24) | (uint)depsArray[i].indexInDependentSkinnedMeshesBuffer,
+                                    shaderDstIndex                        = indices[i].firstVertexIndex
+                                }
+                            }, m_nativeThreadIndex);
+                        }
                     }
                 }
                 else if ((classification & DeformClassification.LegacyCompute) != DeformClassification.None)
                 {
                     var indices     = chunk.GetNativeArray(ref legacyComputeDeformHandle);
-                    var enumerator  = new ChunkEntityEnumerator(true, new v128(lower, upper), chunk.Count);
+                    var enumerator  = new ChunkEntityBatchEnumerator(true, new v128(lower, upper), chunk.Count);
                     var usage       = MeshSkinningRequest.ShaderUsage.CurrentMatrixDeform;
                     usage          |= vertsInDst ? MeshSkinningRequest.ShaderUsage.UseVerticesInDst : usage;
-                    while (enumerator.NextEntityIndex(out int i))
+                    while (enumerator.NextRange(out var rangeStart, out var rangeCount))
                     {
-                        requestsBlockList.Write(new MeshSkinningRequestWithSkeletonTarget
+                        for (int i = rangeStart, rangeEnd = rangeStart + rangeCount; i < rangeEnd; i++)
                         {
-                            skeletonEntity = depsArray[i].root,
-                            request        = new MeshSkinningRequest
+                            requestsBlockList.Write(new MeshSkinningRequestWithSkeletonTarget
                             {
-                                indexInSkeletonBufferShaderUsageHigh8 = ((uint)usage << 24) | (uint)depsArray[i].indexInDependentSkinnedMeshesBuffer,
-                                shaderDstIndex                        = indices[i].firstVertexIndex
-                            }
-                        }, m_nativeThreadIndex);
+                                skeletonEntity = depsArray[i].root,
+                                request        = new MeshSkinningRequest
+                                {
+                                    indexInSkeletonBufferShaderUsageHigh8 = ((uint)usage << 24) | (uint)depsArray[i].indexInDependentSkinnedMeshesBuffer,
+                                    shaderDstIndex                        = indices[i].firstVertexIndex
+                                }
+                            }, m_nativeThreadIndex);
+                        }
                     }
                 }
                 else if ((classification & DeformClassification.LegacyDotsDefom) != DeformClassification.None)
                 {
                     var indices     = chunk.GetNativeArray(ref legacyDotsDeformHandle);
-                    var enumerator  = new ChunkEntityEnumerator(true, new v128(lower, upper), chunk.Count);
+                    var enumerator  = new ChunkEntityBatchEnumerator(true, new v128(lower, upper), chunk.Count);
                     var usage       = MeshSkinningRequest.ShaderUsage.CurrentMatrixDeform;
                     usage          |= vertsInDst ? MeshSkinningRequest.ShaderUsage.UseVerticesInDst : usage;
-                    while (enumerator.NextEntityIndex(out int i))
+                    while (enumerator.NextRange(out var rangeStart, out var rangeCount))
                     {
-                        requestsBlockList.Write(new MeshSkinningRequestWithSkeletonTarget
+                        for (int i = rangeStart, rangeEnd = rangeStart + rangeCount; i < rangeEnd; i++)
                         {
-                            skeletonEntity = depsArray[i].root,
-                            request        = new MeshSkinningRequest
+                            requestsBlockList.Write(new MeshSkinningRequestWithSkeletonTarget
                             {
-                                indexInSkeletonBufferShaderUsageHigh8 = ((uint)usage << 24) | (uint)depsArray[i].indexInDependentSkinnedMeshesBuffer,
-                                shaderDstIndex                        = indices[i].parameters.x
-                            }
-                        }, m_nativeThreadIndex);
+                                skeletonEntity = depsArray[i].root,
+                                request        = new MeshSkinningRequest
+                                {
+                                    indexInSkeletonBufferShaderUsageHigh8 = ((uint)usage << 24) | (uint)depsArray[i].indexInDependentSkinnedMeshesBuffer,
+                                    shaderDstIndex                        = indices[i].parameters.x
+                                }
+                            }, m_nativeThreadIndex);
+                        }
                     }
                 }
                 if ((classification & DeformClassification.PreviousDeform) != DeformClassification.None)
                 {
                     var indices     = chunk.GetNativeArray(ref previousDeformHandle);
-                    var enumerator  = new ChunkEntityEnumerator(true, new v128(lower, upper), chunk.Count);
+                    var enumerator  = new ChunkEntityBatchEnumerator(true, new v128(lower, upper), chunk.Count);
                     var usage       = isDqs ? MeshSkinningRequest.ShaderUsage.PreviousDqsDeform : MeshSkinningRequest.ShaderUsage.PreviousMatrixDeform;
                     usage          |= vertsInDst ? MeshSkinningRequest.ShaderUsage.UseVerticesInDst : usage;
-                    while (enumerator.NextEntityIndex(out int i))
+                    while (enumerator.NextRange(out var rangeStart, out var rangeCount))
                     {
-                        requestsBlockList.Write(new MeshSkinningRequestWithSkeletonTarget
+                        for (int i = rangeStart, rangeEnd = rangeStart + rangeCount; i < rangeEnd; i++)
                         {
-                            skeletonEntity = depsArray[i].root,
-                            request        = new MeshSkinningRequest
+                            requestsBlockList.Write(new MeshSkinningRequestWithSkeletonTarget
                             {
-                                indexInSkeletonBufferShaderUsageHigh8 = ((uint)usage << 24) | (uint)depsArray[i].indexInDependentSkinnedMeshesBuffer,
-                                shaderDstIndex                        = indices[i].firstVertexIndex
-                            }
-                        }, m_nativeThreadIndex);
+                                skeletonEntity = depsArray[i].root,
+                                request        = new MeshSkinningRequest
+                                {
+                                    indexInSkeletonBufferShaderUsageHigh8 = ((uint)usage << 24) | (uint)depsArray[i].indexInDependentSkinnedMeshesBuffer,
+                                    shaderDstIndex                        = indices[i].firstVertexIndex
+                                }
+                            }, m_nativeThreadIndex);
+                        }
                     }
                 }
                 else if ((classification & DeformClassification.LegacyDotsDefom) != DeformClassification.None)
                 {
                     var indices     = chunk.GetNativeArray(ref legacyDotsDeformHandle);
-                    var enumerator  = new ChunkEntityEnumerator(true, new v128(lower, upper), chunk.Count);
+                    var enumerator  = new ChunkEntityBatchEnumerator(true, new v128(lower, upper), chunk.Count);
                     var usage       = MeshSkinningRequest.ShaderUsage.PreviousMatrixDeform;
                     usage          |= vertsInDst ? MeshSkinningRequest.ShaderUsage.UseVerticesInDst : usage;
-                    while (enumerator.NextEntityIndex(out int i))
+                    while (enumerator.NextRange(out var rangeStart, out var rangeCount))
                     {
-                        requestsBlockList.Write(new MeshSkinningRequestWithSkeletonTarget
+                        for (int i = rangeStart, rangeEnd = rangeStart + rangeCount; i < rangeEnd; i++)
                         {
-                            skeletonEntity = depsArray[i].root,
-                            request        = new MeshSkinningRequest
+                            requestsBlockList.Write(new MeshSkinningRequestWithSkeletonTarget
                             {
-                                indexInSkeletonBufferShaderUsageHigh8 = ((uint)usage << 24) | (uint)depsArray[i].indexInDependentSkinnedMeshesBuffer,
-                                shaderDstIndex                        = indices[i].parameters.y
-                            }
-                        }, m_nativeThreadIndex);
+                                skeletonEntity = depsArray[i].root,
+                                request        = new MeshSkinningRequest
+                                {
+                                    indexInSkeletonBufferShaderUsageHigh8 = ((uint)usage << 24) | (uint)depsArray[i].indexInDependentSkinnedMeshesBuffer,
+                                    shaderDstIndex                        = indices[i].parameters.y
+                                }
+                            }, m_nativeThreadIndex);
+                        }
                     }
                 }
                 if ((classification & DeformClassification.TwoAgoDeform) != DeformClassification.None)
                 {
                     var indices     = chunk.GetNativeArray(ref twoAgoDeformHandle);
-                    var enumerator  = new ChunkEntityEnumerator(true, new v128(lower, upper), chunk.Count);
+                    var enumerator  = new ChunkEntityBatchEnumerator(true, new v128(lower, upper), chunk.Count);
                     var usage       = isDqs ? MeshSkinningRequest.ShaderUsage.TwoAgoDqsDeform : MeshSkinningRequest.ShaderUsage.TwoAgoMatrixDeform;
                     usage          |= vertsInDst ? MeshSkinningRequest.ShaderUsage.UseVerticesInDst : usage;
-                    while (enumerator.NextEntityIndex(out int i))
+                    while (enumerator.NextRange(out var rangeStart, out var rangeCount))
                     {
-                        requestsBlockList.Write(new MeshSkinningRequestWithSkeletonTarget
+                        for (int i = rangeStart, rangeEnd = rangeStart + rangeCount; i < rangeEnd; i++)
                         {
-                            skeletonEntity = depsArray[i].root,
-                            request        = new MeshSkinningRequest
+                            requestsBlockList.Write(new MeshSkinningRequestWithSkeletonTarget
                             {
-                                indexInSkeletonBufferShaderUsageHigh8 = ((uint)usage << 24) | (uint)depsArray[i].indexInDependentSkinnedMeshesBuffer,
-                                shaderDstIndex                        = indices[i].firstVertexIndex
-                            }
-                        }, m_nativeThreadIndex);
+                                skeletonEntity = depsArray[i].root,
+                                request        = new MeshSkinningRequest
+                                {
+                                    indexInSkeletonBufferShaderUsageHigh8 = ((uint)usage << 24) | (uint)depsArray[i].indexInDependentSkinnedMeshesBuffer,
+                                    shaderDstIndex                        = indices[i].firstVertexIndex
+                                }
+                            }, m_nativeThreadIndex);
+                        }
                     }
                 }
             }
@@ -1906,6 +1962,8 @@ namespace Latios.Kinemation.Systems
                     batchSkinningHeadersCount = running.batchSkinningHeadersCount,
                     expansionHeadersCount     = running.expansionHeadersCount,
                     meshSkinningCommandsCount = running.meshSkinningCommandsCount,
+
+                    isValid = true
                 };
                 maxData.ValueRW.maxRequiredBoneTransformsForVertexSkinning += running.meshSkinningExtraBoneTransformsCount;
             }
