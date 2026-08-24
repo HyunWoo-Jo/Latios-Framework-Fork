@@ -453,6 +453,165 @@ namespace Latios.Kinemation
             set => Bits.SetBits(ref packedB, 28, 3, (int)value);
         }
     }
+
+    /// <summary>
+    /// A buffer of raw vertex data. When this buffer and UniqueMeshVertexRawLayout are present,
+    /// then this buffer is the definitive defintion of vertex data, and all other vertex-related
+    /// Unique Mesh dynamic buffers are ignored. UniqueMeshIndex and UniqueMeshSubmesh are still
+    /// compatible with this representation.
+    /// </summary>
+    [InternalBufferCapacity(0)]
+    public struct UniqueMeshVertexRawData : IBufferElementData
+    {
+        public byte dataByte;
+    }
+
+    /// <summary>
+    /// A vertex attribute layout description supporting up to 12 attributes.
+    /// Used in combination with UniqueMeshVertexRawData to specify the vertex buffer directly.
+    /// </summary>
+    public struct UniqueMeshVertexRawLayout : IComponentData
+    {
+        /// <summary>
+        /// A vertex attribute descriptor.
+        /// </summary>
+        public struct Descriptor
+        {
+            public UnityEngine.Rendering.VertexAttribute       attribute;
+            public UnityEngine.Rendering.VertexAttributeFormat format;
+            public int                                         dimension;
+        }
+
+        /// <summary>
+        /// Add a new descriptor. Order added should reflect the same order as the raw data.
+        /// </summary>
+        public void Add(Descriptor descriptor)
+        {
+            if (m_length >= 12)
+                return;
+            var index = m_length;
+            WriteAtIndex(descriptor, index);
+            m_length++;
+        }
+
+        /// <summary>
+        /// Removes all descriptors
+        /// </summary>
+        public void Clear() => m_length = 0;
+
+        /// <summary>
+        /// Gets or sets the attribute descriptor at the specified index
+        /// </summary>
+        public Descriptor this[int index]
+        {
+            get
+            {
+                CheckIndexInRange(index);
+                return ReadAtIndex(index);
+            }
+            set
+            {
+                CheckIndexInRange(index);
+                WriteAtIndex(value, index);
+            }
+        }
+
+        /// <summary>
+        /// The number of attributes in the layout description
+        /// </summary>
+        public int length => m_length;
+
+        /// <summary>
+        /// The number of bytes a single vertex occupies, which is the sum of the sizes of all the
+        /// attributes. The UniqueMeshVertexRawData buffer length must be a multiple of this.
+        /// </summary>
+        public int SizeOfVertex()
+        {
+            var count = m_length;
+            var total = 0;
+            for (int i = 0; i < count; i++)
+            {
+                var descriptor  = ReadAtIndex(i);
+                total          += SizeOfFormat(descriptor.format) * descriptor.dimension;
+            }
+            return total;
+        }
+
+        /// <summary>
+        /// The number of bytes a single component within an attribute of the specified format occupies.
+        /// </summary>
+        public static int SizeOfFormat(UnityEngine.Rendering.VertexAttributeFormat format)
+        {
+            switch (format)
+            {
+                case UnityEngine.Rendering.VertexAttributeFormat.Float16:
+                case UnityEngine.Rendering.VertexAttributeFormat.UNorm16:
+                case UnityEngine.Rendering.VertexAttributeFormat.SNorm16:
+                case UnityEngine.Rendering.VertexAttributeFormat.UInt16:
+                case UnityEngine.Rendering.VertexAttributeFormat.SInt16:
+                    return 2;
+                case UnityEngine.Rendering.VertexAttributeFormat.UNorm8:
+                case UnityEngine.Rendering.VertexAttributeFormat.SNorm8:
+                case UnityEngine.Rendering.VertexAttributeFormat.UInt8:
+                case UnityEngine.Rendering.VertexAttributeFormat.SInt8:
+                    return 1;
+                default:
+                    return 4;
+            }
+        }
+
+        uint m_packedHeader;
+        int m_length
+        {
+            get => (int)Bits.GetBits(m_packedHeader, 0, 4);
+            set => Bits.SetBits(ref m_packedHeader, 0, 4, (byte)value);
+        }
+        uint m_enums03;
+        uint m_enums47;
+        uint m_enums811;
+
+        unsafe void WriteAtIndex(Descriptor descriptor, int index)
+        {
+            CheckDimensionInRange(descriptor.dimension);
+            var dimensionOffset = 8 + index * 2;
+            // Valid dimensions are [1, 4], but we store [0, 3], hence the -1 and +1 offsets
+            Bits.SetBits(ref m_packedHeader, dimensionOffset, 2, (byte)(descriptor.dimension - 1));
+            fixed (uint* uintPtr = &m_enums03)
+            {
+                var bytePtr = (byte*)uintPtr;
+                Bits.SetBits(ref bytePtr[index], 0, 4, (byte)descriptor.attribute);
+                Bits.SetBits(ref bytePtr[index], 4, 4, (byte)descriptor.format);
+            }
+        }
+        unsafe Descriptor ReadAtIndex(int index)
+        {
+            Descriptor descriptor;
+            var        dimensionOffset = 8 + index * 2;
+            descriptor.dimension       = (int)Bits.GetBits(m_packedHeader, dimensionOffset, 2) + 1;
+            fixed (uint* uintPtr       = &m_enums03)
+            {
+                var bytePtr          = (byte*)uintPtr;
+                descriptor.attribute = (UnityEngine.Rendering.VertexAttribute)Bits.GetBits(bytePtr[index], 0, 4);
+                descriptor.format    = (UnityEngine.Rendering.VertexAttributeFormat)Bits.GetBits(bytePtr[index], 4, 4);
+            }
+            return descriptor;
+        }
+
+        [Conditional("ENABLE_UNITY_COLLECTIONS_CHECKS"), Conditional("UNITY_DOTS_DEBUG")]
+        void CheckIndexInRange(int index)
+        {
+            if (index < 0 || index >= m_length)
+                throw new ArgumentOutOfRangeException($"index {index} is outside the range of [0, {m_length})");
+        }
+
+        [Conditional("ENABLE_UNITY_COLLECTIONS_CHECKS"), Conditional("UNITY_DOTS_DEBUG")]
+        static void CheckDimensionInRange(int dimension)
+        {
+            if (dimension < 1 || dimension > 4)
+                throw new ArgumentOutOfRangeException($"dimension {dimension} is outside the supported range of [1, 4]");
+        }
+    }
+
     #endregion
 
     #region Material Properties
@@ -865,14 +1024,14 @@ namespace Latios.Kinemation
             return result;
         }
 
-        [Conditional("ENABLE_UNITY_COLLECTIONS_CHECKS")]
+        [Conditional("ENABLE_UNITY_COLLECTIONS_CHECKS"), Conditional("UNITY_DOTS_DEBUG")]
         void CheckTriangleIndex(int triangleIndex)
         {
             if (math.clamp(triangleIndex, 0, triangleCount) != triangleIndex)
                 throw new ArgumentOutOfRangeException($"Triangle index {triangleIndex} is out of range of MeshNormalizationBlob with {triangleCount} triangles.");
         }
 
-        [Conditional("ENABLE_UNITY_COLLECTIONS_CHECKS")]
+        [Conditional("ENABLE_UNITY_COLLECTIONS_CHECKS"), Conditional("UNITY_DOTS_DEBUG")]
         void CheckDuplicateIndex(int rawDuplicate, int duplicateCount)
         {
             if (math.clamp(rawDuplicate, 0, duplicateCount) != rawDuplicate)
