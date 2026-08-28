@@ -121,7 +121,7 @@ namespace Latios.Kinemation
                     {
                         var middleDelta = RootMotionTools.DeltaBetween(beginRoot, endRoot);
                         var toAdd       = middleDelta;
-                        for (float i = -2.5f; i < loopCycleTransitions; i -= 1f)
+                        for (float i = -2.5f; i > loopCycleTransitions; i -= 1f)
                             middleDelta = RootMotionTools.ConcatenateDeltas(middleDelta, toAdd);
                         newDelta        = RootMotionTools.ConcatenateDeltas(RootMotionTools.ConcatenateDeltas(h, middleDelta), t);
                     }
