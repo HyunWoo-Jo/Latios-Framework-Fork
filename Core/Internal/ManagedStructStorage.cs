@@ -254,7 +254,7 @@ namespace Latios
                 stackCache.Sort();
                 for (int i = stackCache.Length - 1; i >= 0; i--)
                 {
-                    storage.RemoveAtSwapBack(i);
+                    storage.RemoveAtSwapBack(stackCache[i]);
                 }
                 foreach (var msc in storage)
                     msc.Dispose();

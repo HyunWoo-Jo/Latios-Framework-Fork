@@ -1,5 +1,5 @@
 #region Header
-#if (ENABLE_UNITY_COLLECTIONS_CHECKS || DEVELOPMENT_BUILD) && !DISABLE_MATERIALMESHINFO_BOUNDS_CHECKING
+#if (ENABLE_UNITY_COLLECTIONS_CHECKS || UNITY_DOTS_DEBUG || DEVELOPMENT_BUILD) && !DISABLE_MATERIALMESHINFO_BOUNDS_CHECKING
 #define ENABLE_MATERIALMESHINFO_BOUNDS_CHECKING
 #endif
 
@@ -93,7 +93,10 @@ namespace Latios.Kinemation.Systems
                 shadowCastingMode  = filterSettings.ShadowCastingMode,
                 receiveShadows     = filterSettings.ReceiveShadows,
                 staticShadowCaster = filterSettings.StaticShadowCaster,
-                allDepthSorted     = false,  // set by culling
+#if UNITY_EDITOR
+                sceneCullingMask = ulong.MaxValue,  // We rely on culling to do this filter ourselves, so don't zero it. Todo: Better location when we fix priority?
+#endif
+                allDepthSorted = false,  // set by culling
             };
         }
 

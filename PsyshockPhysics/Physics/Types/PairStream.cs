@@ -86,7 +86,7 @@ namespace Latios.Psyshock
         internal int   m_length;
         internal int   m_typeHash;
 
-        [Conditional("ENABLE_UNITY_COLLECTIONS_CHECKS")]
+        [Conditional("ENABLE_UNITY_COLLECTIONS_CHECKS"), Conditional("UNITY_DOTS_DEBUG")]
         void CheckTypeHash<T>() where T : unmanaged
         {
             if (m_typeHash != BurstRuntime.GetHashCode32<T>())
@@ -159,7 +159,7 @@ namespace Latios.Psyshock
             data             = new SharedContainerData
             {
                 pairHeaders      = new UnsafeIndexedBlockList<PairHeader>(4096 / UnsafeUtility.SizeOf<PairHeader>(), totalStreams, allocator),
-                blockStreamArray = AllocatorManager.Allocate<BlockStream>(allocator, totalStreams),
+                blockStreamArray = AllocatorManager.Allocate<BlockStreamAllocator>(allocator, totalStreams),
                 state            = AllocatorManager.Allocate<State>(allocator),
                 cellCount        = cellCount,
                 allocator        = allocator
@@ -168,7 +168,7 @@ namespace Latios.Psyshock
             *data.state = default;
 
             for (int i = 0; i < data.pairHeaders.indexCount; i++)
-                data.blockStreamArray[i] = default;
+                data.blockStreamArray[i] = new BlockStreamAllocator(allocator);
         }
 
         /// <summary>
@@ -345,19 +345,7 @@ namespace Latios.Psyshock
             {
                 ref var stream      = ref data.blockStreamArray[i];
                 ref var otherStream = ref pairStreamToStealFrom.data.blockStreamArray[i];
-                if (!stream.blocks.IsCreated)
-                {
-                    stream      = otherStream;
-                    otherStream = default;
-                }
-                else if (otherStream.blocks.IsCreated)
-                {
-                    stream.blocks.AddRange(otherStream.blocks);
-                    stream.bytesRemainingInBlock = otherStream.bytesRemainingInBlock;
-                    stream.nextFreeAddress       = otherStream.nextFreeAddress;
-                    otherStream.blocks.Clear();
-                    otherStream.bytesRemainingInBlock = 0;
-                }
+                stream.ConcatenateFrom(ref otherStream);
             }
         }
 
@@ -427,7 +415,7 @@ namespace Latios.Psyshock
                 CheckWriteAccess();
                 CheckPairPtrVersionMatches(data.state, version);
                 ref var blocks = ref data.blockStreamArray[index];
-                var     ptr    = blocks.Allocate<T>(count, data.allocator);
+                var     ptr    = blocks.Allocate<T>(count);
                 var     result = new StreamSpan<T> { m_ptr = ptr, m_length = count };
                 if (options == NativeArrayOptions.ClearMemory)
                     result.AsSpan().Clear();
@@ -446,7 +434,7 @@ namespace Latios.Psyshock
                 if (sizeInBytes == 0)
                     return null;
                 ref var blocks = ref data.blockStreamArray[index];
-                return blocks.Allocate(sizeInBytes, alignInBytes, data.allocator);
+                return blocks.Allocate(sizeInBytes, alignInBytes);
             }
             /// <summary>
             /// Replaces the top-level ref associated with the pair with a new allocation of type T.
@@ -552,7 +540,7 @@ namespace Latios.Psyshock
                 }
             }
 
-#if ENABLE_UNITY_COLLECTIONS_CHECKS
+#if ENABLE_UNITY_COLLECTIONS_CHECKS || UNITY_DOTS_DEBUG
             /// <summary>
             /// A safe entity handle that can be used inside of PhysicsComponentLookup or PhysicsBufferLookup and corresponds to the
             /// owning entity of the first entity in the pair. It can also be implicitly casted and used as a normal entity reference.
@@ -790,7 +778,7 @@ namespace Latios.Psyshock
 #endif
             }
 
-            [Conditional("ENABLE_UNITY_COLLECTIONS_CHECKS")]
+            [Conditional("ENABLE_UNITY_COLLECTIONS_CHECKS"), Conditional("UNITY_DOTS_DEBUG")]
             void CheckTypeHash<T>() where T : unmanaged
             {
                 if ((header->flags & PairHeader.kRootPtrIsRaw) == PairHeader.kRootPtrIsRaw)
@@ -888,7 +876,7 @@ namespace Latios.Psyshock
 #endif
             }
 
-            [Conditional("ENABLE_UNITY_COLLECTIONS_CHECKS")]
+            [Conditional("ENABLE_UNITY_COLLECTIONS_CHECKS"), Conditional("UNITY_DOTS_DEBUG")]
             void CheckKeyCompatible(in ParallelWriteKey key)
             {
                 if (key.cellCount != data.cellCount)
@@ -896,7 +884,7 @@ namespace Latios.Psyshock
                         $"The key is generated from a different base bucket count {IndexStrategies.BucketCountWithoutNaN(key.cellCount)} from what the PairStream was constructed with {IndexStrategies.BucketCountWithoutNaN(data.cellCount)}");
             }
 
-            [Conditional("ENABLE_UNITY_COLLECTIONS_CHECKS")]
+            [Conditional("ENABLE_UNITY_COLLECTIONS_CHECKS"), Conditional("UNITY_DOTS_DEBUG")]
             void CheckPairCanBeAddedInParallel(in Pair pairFromOtherStream)
             {
                 if (!pairFromOtherStream.isParallelKeySafe)
@@ -904,7 +892,7 @@ namespace Latios.Psyshock
                         $"The pair cannot be safely added to the ParallelWriter because the pair was created from an immediate operation. Add directly to the PairStream instead of the ParallelWriter.");
             }
 
-            [Conditional("ENABLE_UNITY_COLLECTIONS_CHECKS")]
+            [Conditional("ENABLE_UNITY_COLLECTIONS_CHECKS"), Conditional("UNITY_DOTS_DEBUG")]
             void CheckStreamsMatch(Pair other)
             {
                 if (data.cellCount != other.data.cellCount)
@@ -921,14 +909,14 @@ namespace Latios.Psyshock
             internal int                                           onePastLastStreamIndex;
             internal int                                           enumeratorVersion;
 
-            [Conditional("ENABLE_UNITY_COLLECTIONS_CHECKS")]
+            [Conditional("ENABLE_UNITY_COLLECTIONS_CHECKS"), Conditional("UNITY_DOTS_DEBUG")]
             void CheckSafeToEnumerate()
             {
                 if (pair.data.state->enumeratorVersion != enumeratorVersion)
                     throw new InvalidOperationException($"The PairStream Enumerator has been invalidated.");
             }
 
-            [Conditional("ENABLE_UNITY_COLLECTIONS_CHECKS")]
+            [Conditional("ENABLE_UNITY_COLLECTIONS_CHECKS"), Conditional("UNITY_DOTS_DEBUG")]
             void CheckValid()
             {
                 if (pair.header == null)
@@ -958,61 +946,6 @@ namespace Latios.Psyshock
             public const byte kRootPtrIsRaw = 0x8;
         }
 
-        internal struct BlockPtr
-        {
-            public byte* ptr;
-            public int   byteCount;
-        }
-
-        [StructLayout(LayoutKind.Sequential, Size = JobsUtility.CacheLineSize)]
-        internal struct BlockStream
-        {
-            public UnsafeList<BlockPtr> blocks;
-            public byte*                nextFreeAddress;
-            public int                  bytesRemainingInBlock;
-
-            public T* Allocate<T>(int count, AllocatorManager.AllocatorHandle allocator) where T : unmanaged
-            {
-                var neededBytes = UnsafeUtility.SizeOf<T>() * count;
-                return (T*)Allocate(neededBytes, UnsafeUtility.AlignOf<T>(), allocator);
-            }
-
-            public void* Allocate(int sizeInBytes, int alignInBytes, AllocatorManager.AllocatorHandle allocator)
-            {
-                var neededBytes = sizeInBytes;
-                if (Hint.Unlikely(!CollectionHelper.IsAligned(nextFreeAddress, alignInBytes)))
-                {
-                    var newAddress         = (byte*)CollectionHelper.Align((ulong)nextFreeAddress, (ulong)alignInBytes);
-                    var diff               = newAddress - nextFreeAddress;
-                    bytesRemainingInBlock -= (int)diff;
-                    nextFreeAddress        = newAddress;
-                }
-
-                if (Hint.Unlikely(neededBytes > bytesRemainingInBlock))
-                {
-                    if (Hint.Unlikely(!blocks.IsCreated))
-                    {
-                        blocks = new UnsafeList<BlockPtr>(8, allocator);
-                    }
-                    var blockSize = math.max(neededBytes, 16 * 1024);
-                    var newBlock  = new BlockPtr
-                    {
-                        byteCount = blockSize,
-                        ptr       = AllocatorManager.Allocate<byte>(allocator, blockSize)
-                    };
-                    UnityEngine.Debug.Assert(CollectionHelper.IsAligned(newBlock.ptr, alignInBytes));
-                    blocks.Add(newBlock);
-                    nextFreeAddress       = newBlock.ptr;
-                    bytesRemainingInBlock = blockSize;
-                }
-
-                var result             = nextFreeAddress;
-                bytesRemainingInBlock -= neededBytes;
-                nextFreeAddress       += neededBytes;
-                return result;
-            }
-        }
-
         internal struct State
         {
             public int  enumeratorVersion;
@@ -1026,7 +959,7 @@ namespace Latios.Psyshock
             public UnsafeIndexedBlockList<PairHeader> pairHeaders;
 
             [NativeDisableUnsafePtrRestriction]
-            public BlockStream* blockStreamArray;
+            public BlockStreamAllocator* blockStreamArray;
 
             [NativeDisableUnsafePtrRestriction]
             public State* state;
@@ -1113,18 +1046,11 @@ namespace Latios.Psyshock
             return root;
         }
 
-        private static void Deallocate(State* state, UnsafeIndexedBlockList<PairHeader> blockList, BlockStream* blockStreams, AllocatorManager.AllocatorHandle allocator)
+        private static void Deallocate(State* state, UnsafeIndexedBlockList<PairHeader> blockList, BlockStreamAllocator* blockStreams,
+                                       AllocatorManager.AllocatorHandle allocator)
         {
             for (int i = 0; i < blockList.indexCount; i++)
-            {
-                var blockStream = blockStreams[i];
-                if (blockStream.blocks.IsCreated)
-                {
-                    foreach (var block in blockStream.blocks)
-                        AllocatorManager.Free(allocator, block.ptr, block.byteCount);
-                    blockStream.blocks.Dispose();
-                }
-            }
+                blockStreams[i].Dispose();
 
             AllocatorManager.Free(allocator, blockStreams, blockList.indexCount);
             AllocatorManager.Free(allocator, state,        1);
@@ -1140,7 +1066,7 @@ namespace Latios.Psyshock
             public UnsafeIndexedBlockList<PairHeader> blockList;
 
             [NativeDisableUnsafePtrRestriction]
-            public BlockStream* blockStreams;
+            public BlockStreamAllocator* blockStreams;
 
             public AllocatorManager.AllocatorHandle allocator;
 
@@ -1172,16 +1098,16 @@ namespace Latios.Psyshock
 #endif
         }
 
-        [Conditional("ENABLE_UNITY_COLLECTIONS_CHECKS")]
+        [Conditional("ENABLE_UNITY_COLLECTIONS_CHECKS"), Conditional("UNITY_DOTS_DEBUG")]
         static void CheckAllocator(AllocatorManager.AllocatorHandle allocator)
         {
-#if ENABLE_UNITY_COLLECTIONS_CHECKS
+#if ENABLE_UNITY_COLLECTIONS_CHECKS || UNITY_DOTS_DEBUG
             if (allocator.ToAllocator <= Allocator.None)
                 throw new System.InvalidOperationException("Allocator cannot be Invalid or None");
 #endif
         }
 
-        [Conditional("ENABLE_UNITY_COLLECTIONS_CHECKS")]
+        [Conditional("ENABLE_UNITY_COLLECTIONS_CHECKS"), Conditional("UNITY_DOTS_DEBUG")]
         void CheckTargetBucketIsValid(int bucket)
         {
             var bucketCount = IndexStrategies.BucketCountWithoutNaN(data.cellCount);
@@ -1189,7 +1115,7 @@ namespace Latios.Psyshock
                 throw new ArgumentOutOfRangeException($"The target bucket {bucket} is out of range of max buckets {bucketCount}");
         }
 
-        [Conditional("ENABLE_UNITY_COLLECTIONS_CHECKS")]
+        [Conditional("ENABLE_UNITY_COLLECTIONS_CHECKS"), Conditional("UNITY_DOTS_DEBUG")]
         void CheckStreamsMatch(ref PairStream other)
         {
             if (data.cellCount != other.data.cellCount)
@@ -1199,7 +1125,7 @@ namespace Latios.Psyshock
                 throw new InvalidOperationException($"The allocators are not the same. Memory stealing cannot be safely performed.");
         }
 
-        [Conditional("ENABLE_UNITY_COLLECTIONS_CHECKS")]
+        [Conditional("ENABLE_UNITY_COLLECTIONS_CHECKS"), Conditional("UNITY_DOTS_DEBUG")]
         void CheckStreamsMatch(Pair other)
         {
             if (data.cellCount != other.data.cellCount)
@@ -1207,21 +1133,21 @@ namespace Latios.Psyshock
                     $"The streams do not have matching bucket counts: {IndexStrategies.BucketCountWithoutNaN(data.cellCount)} vs {IndexStrategies.BucketCountWithoutNaN(other.data.cellCount)}.");
         }
 
-        [Conditional("ENABLE_UNITY_COLLECTIONS_CHECKS")]
+        [Conditional("ENABLE_UNITY_COLLECTIONS_CHECKS"), Conditional("UNITY_DOTS_DEBUG")]
         static void CheckPairPtrVersionMatches(State* state, int version)
         {
             if (state->pairPtrVersion != version)
                 throw new InvalidOperationException($"The pair allocator has been invalidated by a concatenate operation.");
         }
 
-        [Conditional("ENABLE_UNITY_COLLECTIONS_CHECKS")]
+        [Conditional("ENABLE_UNITY_COLLECTIONS_CHECKS"), Conditional("UNITY_DOTS_DEBUG")]
         static void CheckEnumerationVersionMatches(State* state, int version)
         {
             if (state->pairPtrVersion != version)
                 throw new InvalidOperationException($"The enumerator has been invalidated by an addition or concatenate operation.");
         }
 
-        [Conditional("ENABLE_UNITY_COLLECTIONS_CHECKS")]
+        [Conditional("ENABLE_UNITY_COLLECTIONS_CHECKS"), Conditional("UNITY_DOTS_DEBUG")]
         internal static void CheckNotNull(void* rawPtr)
         {
             if (rawPtr == null)
