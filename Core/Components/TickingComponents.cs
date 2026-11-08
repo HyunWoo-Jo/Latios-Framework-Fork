@@ -46,7 +46,7 @@ namespace Latios
         /// </summary>
         public int firstTickThisFrame;
         /// <summary>
-        /// One tick higher than the highest tick ever evaluated
+        /// One tick higher than the highest tick ever evaluated in a previous frame
         /// </summary>
         public int newTick;
         /// <summary>
@@ -61,6 +61,10 @@ namespace Latios
         /// The interpolation factor for the final tick this frame
         /// </summary>
         public float finalTickFraction;
+        /// <summary>
+        /// Either the current or previous frame's finalTickFraction, with the latter being used for n-1 rendering
+        /// </summary>
+        public float presentationTickFraction;
         /// <summary>
         /// A frame counter for convenience
         /// </summary>
@@ -86,7 +90,7 @@ namespace Latios
         /// <summary>
         /// True if this tick is a tick that follows the tick where new input should be applied, because the ticks are trying to catch up with the game time
         /// </summary>
-        public bool isCatchupTick => tick > newTick;
+        public bool isCatchupTick => tick > inputTick;
         /// <summary>
         /// True if this is a tick that was rolled back with no new inputs to be appended. This only happens in a networked context.
         /// </summary>
@@ -107,15 +111,18 @@ namespace Latios
     [AttributeUsage(AttributeTargets.Struct)]
     public class TickedAutoAddAttribute : Attribute
     {
-        public Type nonTickedType;
+        public Type referenceType;
         public bool copyData;
+        public bool removeReferenceForTickedOnly;
 
-        /// <param name="nonTickedType">The target type this type pairs with for structural changes</param>
+        /// <param name="referenceType">The target type this type pairs with for structural changes</param>
         /// <param name="copyData">If set to true, structural changes will also copy component values. Only valid for unmanaged IComponentData and IBufferElementData.</param>
-        public TickedAutoAddAttribute(Type nonTickedType, bool copyData)
+        /// <param name="removeReferenceForTickingOnly">If set to true, then the reference type is an interpolated type which does not need to be populated for ticking-only entities.</param>
+        public TickedAutoAddAttribute(Type referenceType, bool copyData, bool removeReferenceForTickingOnly)
         {
-            this.nonTickedType = nonTickedType;
-            this.copyData      = copyData;
+            this.referenceType                = referenceType;
+            this.copyData                     = copyData;
+            this.removeReferenceForTickedOnly = removeReferenceForTickingOnly;
         }
     }
 
@@ -133,5 +140,7 @@ namespace Latios
             this.currentTickedType = currentTickedType;
         }
     }
+
+    internal struct UsesDeferredSimulationTag : IComponentData {}
 }
 

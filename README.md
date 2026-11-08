@@ -1,16 +1,6 @@
 ![](https://github.com/Dreaming381/Latios-Framework-Documentation/blob/554a583e217bfe5bf38ece0ed65b22c33711afc6/media/bf2cb606139bb3ca01fe1c4c9f92cdf7.png)
 
-# Latios Framework for Unity ECS – [0.16.0-alpha.6]
-
-**This is a prerelease version of the Latios Framework version 0.16 which is
-still under development. Changelogs and Documentation, including the remainder
-of this README, have not been updated to reflect the new features and changes in
-0.16.**
-
-**You are still welcome to submit bug reports and pull requests for this and
-future prerelease versions!**
-
-**This version of the alpha supports the same editor versions as 0.15.12.**
+# Latios Framework for Unity ECS – [0.16.5]
 
 The Latios Framework is a powerful suite of high-performance low-level APIs and
 feature-sets for Unity’s ECS which aims to give you back control over your
@@ -38,11 +28,10 @@ adaptations of top-class solutions in the industry (see [Third Party
 Notices](THIRD%20PARTY%20NOTICES.md)) as well as original inventions geared
 towards Unity’s ECS.
 
-This version targets Entities 1.4.4 with ENTITY_STORE_V1 and a minimum editor
-version of 6000.3.8f1. Entities 6.4.0 compatibility is not supported at this
-time.
+This version targets Entities 1.4.8 and a minimum editor version of 6000.3.8f1.
+Entities 6.4.0 compatibility is not supported at this time.
 
-*[0.14.x] users, please read the* [*Upgrade
+*[0.15.x] users, please read the* [*Upgrade
 Guide*](https://github.com/Dreaming381/Latios-Framework-Documentation/blob/main/Upgrade%20Guide.md)*!*
 
 ## Modules
@@ -176,9 +165,8 @@ within Unity’s ECS packages. The results of such efforts are best demonstrated
 in [this video](https://youtu.be/AgcRePkWoFc). For a complete breakdown of these
 changes with each configuration and bootstrap, [check out this
 guide](https://github.com/Dreaming381/Latios-Framework-Documentation/blob/main/What%20Parts%20of%20ECS%20Does%20the%20Latios%20Framework%20Change.md).
-
-0.13 marked the beginning of Phase IV, which has focused on higher-level
-workflows and advancing existing technologies for real productions.
+Unity is moving in a direction of trying to make ECS work for Game Objects. The
+Latios Framework instead tries to make the ECS-first experience feel complete.
 
 Long term, the Latios Framework’s mission is to dramatically reduce the
 development effort required to make highly artistic 3D games and short films.
@@ -286,7 +274,7 @@ I do not promise backwards compatibility between feature releases (0.X). I will
 have upgrade guides detailing all the breakages and what to change. But it will
 be a manual process.
 
-Patch releases (0.15.X) will always preserve backwards compatibility back to the
+Patch releases (0.16.X) will always preserve backwards compatibility back to the
 last feature release.
 
 While I will provide tips and suggestions if you use older releases, I will not
@@ -305,10 +293,11 @@ for how to get started.
 -   canmom – Android support, Kinemation baking fixes, and build fixes
 -   Laicasaane – C\#10 support for source generators and Android support for
     HarfBuzz
+-   Obrazy - `CustomCommandBuffer`, fixes for `DynamicHashMap` and various QVVS
+    Transforms improvements
 -   Dechichi01 – Various fixes and improvements for Core, Psyshock, and
     Kinemation
 -   TrustNoOneElse – Backend assistance for QVVS Transforms and Calligraphics
--   Obrazy - Fixes for `DynamicHashMap` and QVVS Transforms backend assistance
 -   clandais – Myri audio source scene editor handles
 -   Anthiese – Mac OS support for AclUnity
 -   IlyasFed (NotBugThisFicha) – ADPCM for Myri
@@ -320,6 +309,16 @@ for how to get started.
 -   Miskinis – Unity Transforms mode fixes
 -   Everyone else who reported bugs and made the Latios Framework more stable
     for everyone
+
+## AI Disclosure
+
+Latios Framework 0.16.0 is the first release to include heavy LLM assistance.
+All code has been human-reviewed. Runtime code and especially user-facing APIs
+are especially scrutinized if produced by an LLM. Much of the code is still
+written by organic lifeforms. LLMs are used to speed up writing the
+implementation of something perfectly defined, work around Unity editor
+problems, and find bugs and regressions before they are released (which was a
+major issue prior to their use).
 
 ## A Word of Caution
 

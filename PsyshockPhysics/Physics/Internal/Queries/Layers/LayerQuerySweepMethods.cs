@@ -31,6 +31,9 @@ namespace Latios.Psyshock
                 }
             }
 
+            if (layer.cellCount == 1)
+                return;
+
             var crossBucketIndex = IndexStrategies.CrossBucketIndex(layer.cellCount);
             AabbSweepBucket(in aabb, in layer, layer.GetBucketSlices(crossBucketIndex), ref processor);
         }
@@ -87,7 +90,7 @@ namespace Latios.Psyshock
                 return;
 
             var node = context.bucket.intervalTree[(int)currentIndex];
-            if (context.qxmin >= node.subtreeXmax)
+            if (context.qxmin > node.subtreeXmax)
                 return;
 
             SearchTree(GetLeftChildIndex(currentIndex), ref context, ref processor);
@@ -136,7 +139,7 @@ namespace Latios.Psyshock
                     }
 
                     var node = context.bucket.intervalTree[(int)currentFrame.currentIndex];
-                    if (context.qxmin >= node.subtreeXmax)
+                    if (context.qxmin > node.subtreeXmax)
                     {
                         currentFrameIndex--;
                         continue;
@@ -264,6 +267,9 @@ namespace Latios.Psyshock
                         m_bucketIjk.y = m_minBucket.y;
                         if (m_bucketIjk.x > m_maxBucket.x)
                         {
+                            // If there's only one cell (and therefore no cross-bucket), return now.
+                            if (m_result.layer.cellCount == 1)
+                                return false;
                             // Set the target bucket to the cross bucket by adding one to the max bucket
                             m_bucketIjk = m_result.layer.worldSubdivisionsPerAxis - 1;
                             m_bucketIjk.z++;
@@ -308,7 +314,7 @@ namespace Latios.Psyshock
                     }
 
                     var node = m_bucket.intervalTree[(int)currentFrame.currentIndex];
-                    if (m_qxmin >= node.subtreeXmax)
+                    if (m_qxmin > node.subtreeXmax)
                     {
                         m_currentFrameIndex--;
                         continue;

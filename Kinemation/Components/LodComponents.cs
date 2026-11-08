@@ -101,6 +101,15 @@ namespace Latios.Kinemation
     }
 
     /// <summary>
+    /// The LOD Group reference point in local space to be paired with a LodHeightPercentages or LodHieghtPercentagesWithCrossfadeMargins.
+    /// This reference point assumes a static relative relationship between group members. If absent, the value is assumed to be default.
+    /// </summary>
+    public struct LodGroupReferencePoint : IComponentData
+    {
+        public float3 localPosition;
+    }
+
+    /// <summary>
     /// Specifies that this crossfade should use SpeedTree-style crossfades which only ever renders the higher-res LOD
     /// and morphs it to perceptually match the lower-res LOD.
     /// </summary>
@@ -399,7 +408,7 @@ namespace Latios.Kinemation
                 areaScale2  = meshMetric.meshLocalBounds.y * math.max(meshMetric.meshLocalBounds.x, meshMetric.meshLocalBounds.z);
             areaScale      /= math.max(1e-6f, areaScale2);
 
-            var distributionMetric = meshMetric.uv0Metric * areaScale / (textureScale.x * textureScale.y);
+            var distributionMetric = meshMetric.uv0Metric * areaScale / math.abs(textureScale.x * textureScale.y);
 
             var v      = (texelCount * distanceSq) / math.max(distributionMetric * cameraMipMapFactor, math.EPSILON);
             var result = 0.5f * math.log2(math.abs(v));

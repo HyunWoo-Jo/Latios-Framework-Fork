@@ -57,7 +57,7 @@ namespace Latios.Transforms.Systems
                 {
                     rootsSet = rootsSet,
                     stream   = stream.AsWriter(),
-                }.Inject(api).ScheduleParallel(m_newRootsJobQuery, jh);
+                }.Inject(api).ScheduleParallel(m_newChildrenJobQuery, jh);
                 m_allQuery.ResetFilter();
                 m_allQuery.AddChangedVersionFilter(ComponentType.ReadOnly<TickedWorldTransform>());
                 jh = new RestoreExistingFromHistoryJob().Inject(api).ScheduleParallel(m_allQuery, jh);
@@ -217,13 +217,13 @@ namespace Latios.Transforms.Systems
                     if (prevWorlds[i].rotation.value.Equals(float4.zero))
                         continue;
                     if (!wroteWorldTransform)
-                        wroteWorldTransform           = prevWorlds[i].worldTransform.Equals(worldTransforms[i].worldTransform);
+                        wroteWorldTransform           = !prevWorlds[i].worldTransform.Equals(worldTransforms[i].worldTransform);
                     worldTransforms[i].worldTransform = prevWorlds[i].worldTransform;
 
                     if (prevLocals != null)
                     {
-                        var handle    = rootReferences[i].ToHandle(ref entityInHierarchyLookup, ref entityInHierarchyCleanupLookup);
-                        prevLocals[i] = WorldLocalOps.CopyTickedLocalToCache(in handle);
+                        var handle = rootReferences[i].ToHandle(ref entityInHierarchyLookup, ref entityInHierarchyCleanupLookup);
+                        WorldLocalOps.RestoreFromTickedLocalCache(in handle, in prevLocals[i]);
                     }
                 }
                 if (wroteWorldTransform)
@@ -358,7 +358,8 @@ namespace Latios.Transforms.Systems
             public unsafe void Execute(in ArchetypeChunk chunk, int unfilteredChunkIndex, bool useEnabledMask, in v128 chunkEnabledMask)
             {
                 bool updatePrevious = chunk.DidChange(ref worldTransformHandle, lastSystemVersion);
-                bool updateTwoAgo   = chunk.Has(ref twoAgoTransformHandle) && DidChangeLastFrame(chunk.GetChangeVersion(ref previousTransformHandle));
+                bool hasTwoAgo      = chunk.Has(ref twoAgoTransformHandle);
+                bool updateTwoAgo   = hasTwoAgo && DidChangeLastFrame(chunk.GetChangeVersion(ref previousTransformHandle));
                 bool checkForInit   = chunk.DidOrderChange(lastSystemVersion);
 
                 if (!updatePrevious && checkForInit)
@@ -373,7 +374,7 @@ namespace Latios.Transforms.Systems
                         }
                     }
                 }
-                if (!updateTwoAgo && checkForInit)
+                if (hasTwoAgo && !updateTwoAgo && checkForInit)
                 {
                     var                   twoAgos = chunk.GetComponentDataPtrRO(ref twoAgoTransformHandle);
                     TickedWorldTransform* current = null;
@@ -415,7 +416,7 @@ namespace Latios.Transforms.Systems
                         }
                     }
                 }
-                else if (updateTwoAgo)
+                else if (hasTwoAgo && updateTwoAgo)
                 {
                     var prevs   = chunk.GetRequiredComponentDataPtrRO(ref previousTransformHandle);
                     var twoAgos = chunk.GetRequiredComponentDataPtrRW(ref twoAgoTransformHandle);

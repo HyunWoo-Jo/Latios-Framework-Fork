@@ -35,11 +35,7 @@ namespace Latios
         /// Returns the CommandSpan as a .NET Span
         /// </summary>
         /// <returns></returns>
-        public Span<T> AsSpan()
-        {
-            CommandSpan.CheckNotNull(m_ptr);
-            return new Span<T>(m_ptr, length);
-        }
+        public Span<T> AsSpan() => new Span<T>(m_ptr, length);
 
         /// <summary>
         /// Implicitly converts this CommandSpan into a DynamicCommandSpan.
@@ -69,7 +65,6 @@ namespace Latios
         public CommandSpan<T> GetSpan<T>() where T : unmanaged
         {
             CheckTypeHash<T>();
-            CommandSpan.CheckNotNull(m_ptr);
             return new CommandSpan<T> { m_ptr = (T*)m_ptr, m_length = m_length };
         }
 
@@ -82,16 +77,6 @@ namespace Latios
         {
             if (m_typeHash != BurstRuntime.GetHashCode32<T>())
                 throw new InvalidOperationException($"Attempted to access a CommandSpan from a DynamicCommandSpan using the wrong type.");
-        }
-    }
-
-    internal static unsafe class CommandSpan
-    {
-        [Conditional("ENABLE_UNITY_COLLECTIONS_CHECKS"), Conditional("UNITY_DOTS_DEBUG")]
-        internal static void CheckNotNull(void* rawPtr)
-        {
-            if (rawPtr == null)
-                throw new InvalidOperationException("Attempted to access a CommandSpan which was never allocated.");
         }
     }
 }

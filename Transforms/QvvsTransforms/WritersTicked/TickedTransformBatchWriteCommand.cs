@@ -1,7 +1,6 @@
 #if !LATIOS_TRANSFORMS_UNITY
 using System;
 using System.Collections.Generic;
-using System.Security.Cryptography;
 using Latios.Unsafe;
 using static Latios.Transforms.TransformTools.Propagate;
 using Unity.Collections;
@@ -468,7 +467,7 @@ namespace Latios.Transforms
                     sortedCommands[dst].sortId = dst;
                     dst++;
                 }
-                if (sortedCommands.Length == 0)
+                if (dst == 0)
                 {
                     tsa.Dispose();
                     return;
@@ -488,7 +487,8 @@ namespace Latios.Transforms
                         ApplyHierarchyBatchTransformsWithoutChecks(commandSlice, ref childTsa);
                         childTsa.Dispose();
                         rangeStart = i;
-                        hierarchy  = sortedCommands[i].aspect.entityInHierarchyHandle.m_hierarchy;
+                        if (i < sortedCommands.Length)
+                            hierarchy = sortedCommands[i].aspect.entityInHierarchyHandle.m_hierarchy;
                     }
                 }
             }
@@ -514,6 +514,8 @@ namespace Latios.Transforms
                     dst++;
                 }
             }
+            if (dst == 0)
+                return;
             data = data.Slice(0, dst);
             ops  = ops.Slice(0, dst);
             switch (firstAspect.m_accessType)
