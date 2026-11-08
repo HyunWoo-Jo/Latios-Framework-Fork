@@ -1,4 +1,4 @@
-﻿using System;
+using System;
 using Latios.Unsafe;
 using Unity.Burst;
 using Unity.Collections;
@@ -159,10 +159,12 @@ namespace Latios.Myri
                 clipStart %= clip.sampleCountPerChannel;
                 if (clipStart + output.Length * clipSampleStride + 1 < clip.sampleCountPerChannel)
                 {
+                    // 래핑 없이 샘플링한다
                     SampleMismatchedRateOneshot(tsa, ref clip, clipStart, clipSampleStride, isRightChannel, weight, output);
                     return;
                 }
 
+                // 래핑 구간을 연속 샘플로 모아 보간한다
                 var       firstInputSample = (int)clipStart;
                 var       lastInputSample  = (int)math.ceil(clipStart + output.Length * clipSampleStride);
                 var       inputSampleCount = lastInputSample - firstInputSample + 2;  // Give us a little padding
@@ -190,11 +192,10 @@ namespace Latios.Myri
                 int remainingClipSamples   = clip.sampleCountPerChannel - clipStart;
                 int remainingOutputSamples = math.min(output.Length, math.select(0, remainingClipSamples, remainingClipSamples > 0));
                 int inputSampleCount       = remainingOutputSamples - outputStartIndex;
-                int inputSampleStart       = math.max(clipStart, 0);
                 if (inputSampleCount <= 0)
                     return;
-
-                var context                = new CodecContext
+                int inputSampleStart = math.max(clipStart, 0);
+                var context          = new CodecContext
                 {
                     sampleRate           = frameState.Value.format.sampleRate,
                     threadStackAllocator = tsa.CreateChildAllocator()
@@ -234,13 +235,11 @@ namespace Latios.Myri
                 var inputSampleEnd         = (int)math.ceil(clipStart + clipSampleStride * (sampleCount - 1));
                 if (inputSampleEnd >= clip.sampleCountPerChannel)
                 {
+                    // 부동소수점 오차로 범위를 넘으면 샘플 하나를 줄인다
                     inputSampleEnd--;
                     sampleCount--;
                 }
                 var inputSampleCount = inputSampleEnd - inputSampleStart + 1;
-                if (sampleCount <= 0 || inputSampleCount <= 1)
-                    return;
-
                 var context          = new CodecContext
                 {
                     sampleRate           = frameState.Value.format.sampleRate,
@@ -252,7 +251,7 @@ namespace Latios.Myri
                 {
                     double pos                    = clipStart + clipSampleStride * i;
                     var    posLeft                = (int)pos;
-                    var    posRight               = posLeft + 1;
+                    var    posRight               = math.min(posLeft + 1, inputSampleCount - 1);
                     var    leftSample             = input[posLeft];
                     var    rightSample            = input[posRight];
                     output[outputStartIndex + i] += math.lerp(leftSample, rightSample, (float)math.frac(pos)) * weight;

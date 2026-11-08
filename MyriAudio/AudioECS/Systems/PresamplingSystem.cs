@@ -38,7 +38,7 @@ namespace Latios.Myri.AudioEcsBuiltin
             }
 
             // Read updates
-            for (int i = context.visualFrameUpdates.length - 1; i >= 0; i--)
+            for (int i = 0; i < context.visualFrameUpdates.length; i++)
             {
                 var update = context.visualFrameUpdates[i];
                 foreach (var message in update.pipeReader.Each<PresampledListenerMessage>())
@@ -221,6 +221,8 @@ namespace Latios.Myri.AudioEcsBuiltin
                         {
                             ref var channel = ref channels.ElementAt(channelIndex);
                             ref var dsp     = ref newBlob.channelDspsLeft[i];
+                            if (!channel.filters.IsCreated)
+                                channel.filters = new UnsafeList<PresampledChannel.Svf>(dsp.filters.Length, context.auxWorld.allocator);
                             channel.filters.Resize(dsp.filters.Length, NativeArrayOptions.ClearMemory);
                             for (int j = 0; j < dsp.filters.Length; j++)
                             {
@@ -238,6 +240,8 @@ namespace Latios.Myri.AudioEcsBuiltin
                         {
                             ref var channel = ref channels.ElementAt(channelIndex);
                             ref var dsp     = ref newBlob.channelDspsRight[i];
+                            if (!channel.filters.IsCreated)
+                                channel.filters = new UnsafeList<PresampledChannel.Svf>(dsp.filters.Length, context.auxWorld.allocator);
                             channel.filters.Resize(dsp.filters.Length, NativeArrayOptions.ClearMemory);
                             for (int j = 0; j < dsp.filters.Length; j++)
                             {
