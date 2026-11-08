@@ -452,11 +452,7 @@ namespace Latios.Unsafe
                     {
                         var address = blockList->blocks[blockList->blocks.Length - 1].ptr;
                         if (src < blockList->elementCount)
-                        {
-                            var byteCount = (blockList->elementCount - src) * m_elementSize;
-                            UnsafeUtility.MemCpy(dst, address, byteCount);
-                            dst += byteCount;
-                        }
+                            UnsafeUtility.MemCpy(dst, address, (blockList->elementCount - src) * m_elementSize);
                     }
                 }
             }

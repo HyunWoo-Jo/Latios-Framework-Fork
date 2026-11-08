@@ -54,7 +54,7 @@ namespace Latios.Psyshock
 		public static bool AreOverlapping(in Collider colliderA,
                                            in RigidTransform aTransform,
                                            in Collider colliderB,
-                                           in RigidTransform bTransform)
+                                           in RigidTransform bTransforme)
 		{
 			switch ((colliderA.type, colliderB.type))
 			{

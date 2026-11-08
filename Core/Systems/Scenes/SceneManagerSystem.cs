@@ -55,19 +55,14 @@ namespace Latios.Systems
                 foreach (var rls in SystemAPI.Query<RequestLoadScene>())
                 {
                     if (rls.newScene.Length == 0)
-                        continue;
+                        return;
                     if (targetScene.Length == 0)
                         targetScene = rls.newScene;
                     else if (rls.newScene != targetScene)
                         isInvalid = true;
                 }
 
-                if (targetScene.Length == 0)
-                {
-                    // All the requests had an empty target scene. Consume them.
-                    EntityManager.RemoveComponent<RequestLoadScene>(rlsQuery);
-                }
-                else
+                if (targetScene.Length > 0)
                 {
                     if (isInvalid)
                     {
@@ -123,8 +118,7 @@ namespace Latios.Systems
                             EntityManager.AddComponent<DisableSynchronousSubsceneLoadingTag>(e);
                             if (EntityManager.HasComponent<Unity.Scenes.ResolvedSectionEntity>(e))
                             {
-                                var resolved = EntityManager.GetBuffer<Unity.Scenes.ResolvedSectionEntity>(e).ToNativeArray(Allocator.Temp);
-                                foreach (var s in resolved)
+                                foreach (var s in EntityManager.GetBuffer<Unity.Scenes.ResolvedSectionEntity>(e))
                                     EntityManager.AddComponent<DisableSynchronousSubsceneLoadingTag>(s.SectionEntity);
                             }
                         }
@@ -147,8 +141,7 @@ namespace Latios.Systems
                     request.LoadFlags |= SceneLoadFlags.BlockOnStreamIn;
                     if (EntityManager.HasComponent<Unity.Scenes.ResolvedSectionEntity>(subsceneEntity))
                     {
-                        var resolved = EntityManager.GetBuffer<Unity.Scenes.ResolvedSectionEntity>(subsceneEntity).ToNativeArray(Allocator.Temp);
-                        foreach (var s in resolved)
+                        foreach (var s in EntityManager.GetBuffer<Unity.Scenes.ResolvedSectionEntity>(subsceneEntity))
                             EntityManager.AddComponentData(s.SectionEntity, request);
                     }
                     else if (EntityManager.HasComponent<Unity.Scenes.SceneEntityReference>(subsceneEntity))

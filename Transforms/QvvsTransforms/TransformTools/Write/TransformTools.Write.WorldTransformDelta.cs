@@ -70,7 +70,7 @@ namespace Latios.Transforms
                 refRW.ValueRW.worldTransform           = newTransform;
                 return;
             }
-            TransformWorld(handle, appliedTransform, key, ref componentBroker);
+            TransformWorld(handle, appliedTransform, ref componentBroker);
         }
 
         /// <summary>
@@ -201,13 +201,13 @@ namespace Latios.Transforms
             var handle = GetHierarchyHandle(entity, ref rootReferenceLookupRO, ref entityInHierarchyLookupRO, ref entityInHierarchyCleanupLookupRO);
             if (handle.isNull)
             {
-                RefRW<WorldTransform> refRW            = transformLookupRW.GetCheckedLookup(entity, key).GetRefRW(entity);
+                RefRW<WorldTransform> refRW            = transformLookupRW.GetCheckedLookup(handle.root.entity, key).GetRefRW(entity);
                 TransformQvvs         currentTransform = refRW.ValueRO.worldTransform;
                 TransformQvvs         newTransform     = qvvs.mulclean(appliedTransform, currentTransform);
                 refRW.ValueRW.worldTransform           = newTransform;
                 return;
             }
-            TransformWorld(handle, in appliedTransform, ref transformLookupRW.GetCheckedLookup(handle.root.entity, key), ref entityStorageInfoLookup);
+            TransformWorld(handle, in appliedTransform, ref transformLookupRW.GetCheckedLookup(entity, key), ref entityStorageInfoLookup);
         }
 
         /// <summary>
@@ -333,7 +333,7 @@ namespace Latios.Transforms
                 refRW.ValueRW.worldTransform                 = newTransform;
                 return;
             }
-            TransformTickedWorld(handle, appliedTransform, key, ref componentBroker);
+            TransformTickedWorld(handle, appliedTransform, ref componentBroker);
         }
 
         /// <summary>
@@ -371,7 +371,7 @@ namespace Latios.Transforms
         {
             if (handle.isCopyParent)
                 return;
-            ref var                      lookup     = ref TickedComponentBrokerAccess.From(ref componentBroker);
+            ref var                      lookup     = ref ComponentBrokerAccess.From(ref componentBroker);
             Span<TransformQvvs>          transforms = stackalloc TransformQvvs[] { appliedTransform };
             Span<Propagate.WriteCommand> commands   =
                 stackalloc Propagate.WriteCommand[] { new Propagate.WriteCommand
@@ -396,7 +396,7 @@ namespace Latios.Transforms
             if (handle.isCopyParent)
                 return;
             key.Validate(handle.root.entity);
-            ref var                      lookup     = ref TickedComponentBrokerParallelAccess.From(ref componentBroker);
+            ref var                      lookup     = ref ComponentBrokerParallelAccess.From(ref componentBroker);
             Span<TransformQvvs>          transforms = stackalloc TransformQvvs[] { appliedTransform };
             Span<Propagate.WriteCommand> commands   =
                 stackalloc Propagate.WriteCommand[] { new Propagate.WriteCommand
@@ -464,13 +464,13 @@ namespace Latios.Transforms
             var handle = GetHierarchyHandle(entity, ref rootReferenceLookupRO, ref entityInHierarchyLookupRO, ref entityInHierarchyCleanupLookupRO);
             if (handle.isNull)
             {
-                RefRW<TickedWorldTransform> refRW            = transformLookupRW.GetCheckedLookup(entity, key).GetRefRW(entity);
+                RefRW<TickedWorldTransform> refRW            = transformLookupRW.GetCheckedLookup(handle.root.entity, key).GetRefRW(entity);
                 TransformQvvs               currentTransform = refRW.ValueRO.worldTransform;
                 TransformQvvs               newTransform     = qvvs.mulclean(appliedTransform, currentTransform);
                 refRW.ValueRW.worldTransform                 = newTransform;
                 return;
             }
-            TransformTickedWorld(handle, in appliedTransform, ref transformLookupRW.GetCheckedLookup(handle.root.entity, key), ref entityStorageInfoLookup);
+            TransformTickedWorld(handle, in appliedTransform, ref transformLookupRW.GetCheckedLookup(entity, key), ref entityStorageInfoLookup);
         }
 
         /// <summary>

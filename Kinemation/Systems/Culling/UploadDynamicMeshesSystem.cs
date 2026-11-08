@@ -262,7 +262,7 @@ namespace Latios.Kinemation.Systems
                         {
                             if (buffer.Length == verticesCount)
                             {
-                                currentPtr  = buffer.AsNativeArray().GetUnsafeReadOnlyPtr();
+                                currentPtr  = buffer.AsNativeArray().GetSubArray(verticesCount * currentRotation, verticesCount).GetUnsafeReadOnlyPtr();
                                 previousPtr = currentPtr;
                                 twoAgoPtr   = currentPtr;
                             }

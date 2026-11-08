@@ -53,9 +53,9 @@ namespace Latios.Transforms.Systems
                 {
                     var  buffer = buffers[i].AsNativeArray();
                     bool fail   = false;
-                    for (int j = 1; j < buffer.Length; j++)
+                    foreach (var element in buffer)
                     {
-                        if (esil.IsAlive(buffer[j].entityInHierarchy.entity))
+                        if (esil.Exists(element.entityInHierarchy.entity))
                         {
                             fail = true;
                             break;

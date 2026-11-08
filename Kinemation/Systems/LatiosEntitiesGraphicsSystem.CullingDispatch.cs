@@ -148,8 +148,7 @@ namespace Latios.Kinemation.Systems
                     batchFilterSettingsByRenderFilterSettingsSharedIndex = m_FilterSettings,
                     // To be able to access the material/mesh IDs, we need access to the registered material/mesh
                     // arrays. If we can't get them, then we simply skip in those cases.
-                    brgRenderMeshArrays             = m_brgRenderMeshArrays,
-                    brgRenderMeshArrayIdToIndexMaps = m_brgRenderMeshArrayIdToIndexMaps,
+                    brgRenderMeshArrays = m_brgRenderMeshArrays,
 
 #if UNITY_EDITOR
                     includeExcludeListFilter = includeExcludeListFilter,

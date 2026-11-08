@@ -2,7 +2,6 @@ using System;
 using System.Collections.Generic;
 using Latios.Psyshock;
 using Unity.Collections;
-using Unity.Collections.LowLevel.Unsafe;
 using Unity.Entities;
 using Unity.Jobs;
 using Unity.Mathematics;
@@ -293,11 +292,10 @@ namespace Latios.Kinemation
     {
         //public BatchCullingContext cullingContext;
         //public NativeArray<int>    internalToExternalMappingIds;
-        public ThreadLocalAllocator                                cullingThreadLocalAllocator;
-        public BatchCullingOutput                                  batchCullingOutput;
-        public NativeParallelHashMap<int, BatchFilterSettings>     batchFilterSettingsByRenderFilterSettingsSharedIndex;
-        public NativeParallelHashMap<int, BRGRenderMeshArray>      brgRenderMeshArrays;
-        public NativeHashMap<int, BrgRenderMeshArrayIdToIndexMaps> brgRenderMeshArrayIdToIndexMaps;
+        public ThreadLocalAllocator                            cullingThreadLocalAllocator;
+        public BatchCullingOutput                              batchCullingOutput;
+        public NativeParallelHashMap<int, BatchFilterSettings> batchFilterSettingsByRenderFilterSettingsSharedIndex;
+        public NativeParallelHashMap<int, BRGRenderMeshArray>  brgRenderMeshArrays;
 #if UNITY_EDITOR
         public IncludeExcludeListFilter includeExcludeListFilter;
 #endif
@@ -306,45 +304,6 @@ namespace Latios.Kinemation
         {
             // We don't own this data
             return inputDeps;
-        }
-    }
-
-    // Keyed by the same RenderMeshArray shared component index as BrgCullingContext.brgRenderMeshArrays
-    internal struct BrgRenderMeshArrayIdToIndexMaps : IDisposable
-    {
-        public UnsafeHashMap<BatchMeshID, int>     meshIdToRmaIndex;
-        public UnsafeHashMap<BatchMaterialID, int> materialIdToRmaIndex;
-        public uint4                               hash128;
-        public int                                 version;
-
-        public BrgRenderMeshArrayIdToIndexMaps(in BRGRenderMeshArray brgRenderMeshArray, AllocatorManager.AllocatorHandle allocator)
-        {
-            hash128 = brgRenderMeshArray.Hash128;
-            version = brgRenderMeshArray.Version;
-
-            // Duplicates resolve to the first index. Null IDs are failed registrations and are omitted.
-            meshIdToRmaIndex = new UnsafeHashMap<BatchMeshID, int>(math.max(brgRenderMeshArray.UniqueMeshes.Length, 1), allocator);
-            for (int i = 0; i < brgRenderMeshArray.UniqueMeshes.Length; i++)
-            {
-                var id = brgRenderMeshArray.UniqueMeshes[i];
-                if (id != BatchMeshID.Null)
-                    meshIdToRmaIndex.TryAdd(id, i);
-            }
-            materialIdToRmaIndex = new UnsafeHashMap<BatchMaterialID, int>(math.max(brgRenderMeshArray.UniqueMaterials.Length, 1), allocator);
-            for (int i = 0; i < brgRenderMeshArray.UniqueMaterials.Length; i++)
-            {
-                var id = brgRenderMeshArray.UniqueMaterials[i];
-                if (id != BatchMaterialID.Null)
-                    materialIdToRmaIndex.TryAdd(id, i);
-            }
-        }
-
-        public bool Matches(in BRGRenderMeshArray brgRenderMeshArray) => version == brgRenderMeshArray.Version && hash128.Equals(brgRenderMeshArray.Hash128);
-
-        public void Dispose()
-        {
-            meshIdToRmaIndex.Dispose();
-            materialIdToRmaIndex.Dispose();
         }
     }
 
@@ -388,13 +347,13 @@ namespace Latios.Kinemation
         TwoAgoVertexDqs = 1 << 8,
         LegacyLbs = 1 << 9,
         LegacyCompute = 1 << 10,
-        LegacyDotsDeform = 1 << 11,
+        LegacyDotsDefom = 1 << 11,
         RequiresUploadDynamicMesh = 1 << 12,
         RequiresGpuComputeBlendShapes = 1 << 13,
         RequiresGpuComputeMatrixSkinning = 1 << 14,
         RequiresGpuComputeDqsSkinning = 1 << 15,
-        AnyCurrentDeform = CurrentDeform | LegacyCompute | LegacyDotsDeform,
-        AnyPreviousDeform = PreviousDeform | LegacyDotsDeform,
+        AnyCurrentDeform = CurrentDeform | LegacyCompute | LegacyDotsDefom,
+        AnyPreviousDeform = PreviousDeform | LegacyDotsDefom,
     }
 
     internal partial struct DeformClassificationMap : ICollectionComponent

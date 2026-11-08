@@ -99,8 +99,7 @@ namespace Latios.Kinemation.Systems
         [BurstCompile]
         public void OnUpdate(ref SystemState state)
         {
-            var api          = this.GetApi(ref state);
-            var job          = new Job().Inject(api);
+            var job = new Job().Inject(api);
             state.Dependency = job.ScheduleParallel(m_query, state.Dependency);
         }
 

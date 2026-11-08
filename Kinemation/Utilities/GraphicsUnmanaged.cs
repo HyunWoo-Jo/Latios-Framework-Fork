@@ -325,8 +325,7 @@ namespace Latios.Kinemation
 
         internal static bool IsValid(GraphicsBufferUnmanaged unmanaged)
         {
-            ref var versionsList = ref handles.Data.versions;
-            return unmanaged.version != 0 && versionsList.IsCreated && (uint)unmanaged.index < versionsList.Length && unmanaged.version == handles.Data.versions[unmanaged.index];
+            return unmanaged.version == handles.Data.versions[unmanaged.index];
         }
 
         internal static GraphicsBuffer GetAtIndex(int index) => buffers[index];

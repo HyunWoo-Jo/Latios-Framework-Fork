@@ -133,17 +133,14 @@ namespace Latios
 
         /// <summary>
         /// When the Scene Manager is not installed, call this function to destroy the old sceneBlackboardEntity,
-        /// create a new one, and call the OnNewScene() method for all systems which have it during the next update.
+        /// create a new one, and call the OnNewScene() method for all systems which have it.
         /// </summary>
         /// <returns></returns>
-        public BlackboardEntity ForceCreateNewSceneBlackboardEntity()
+        public BlackboardEntity ForceCreateNewSceneBlackboardEntityAndCallOnNewScene()
         {
             CreateNewSceneBlackboardEntity(true);
             return sceneBlackboardEntity;
         }
-
-        [Obsolete("Use ForceCreateNewSceneBlackboardEntity() instead.")]
-        public BlackboardEntity ForceCreateNewSceneBlackboardEntityAndCallOnNewScene() => ForceCreateNewSceneBlackboardEntity();
 
         //Todo: Make this API public in the future.
         internal void Pause() => m_paused                    = true;

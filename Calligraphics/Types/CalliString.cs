@@ -132,12 +132,7 @@ namespace Latios.Calligraphics
         /// <returns>Always true.</returns>
         public bool TryResize(int newLength, NativeArrayOptions clearOptions = NativeArrayOptions.ClearMemory)
         {
-            if (newLength < 0)
-                return false;
-            var oldLength = Length;
-            Length        = newLength;
-            if (clearOptions == NativeArrayOptions.ClearMemory)
-                m_stringBuffer.AsNativeArray().GetSubArray(oldLength, newLength - oldLength).AsSpan().Clear();
+            Length = newLength;
             return true;
         }
 
@@ -302,7 +297,7 @@ namespace Latios.Calligraphics
 
         public int CompareTo(string other)
         {
-            return ToString().CompareTo(other);
+            throw new NotImplementedException();
         }
 
         public int CompareTo(NativeText other)

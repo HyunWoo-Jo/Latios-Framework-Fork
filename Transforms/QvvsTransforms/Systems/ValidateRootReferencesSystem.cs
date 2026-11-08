@@ -10,23 +10,26 @@ namespace Latios.Transforms.Systems
     [BurstCompile]
     public partial struct ValidateRootReferencesSystem : ISystem, ILatiosApi
     {
+        EntityQuery m_query;
+
         [BurstCompile]
         public void OnCreate(ref SystemState state)
         {
-            var api = this.OnCreateForLatios(ref state);
-            api.GetDefaultQuery<Job>().SetOrderVersionFilter();
+            this.OnCreateForLatios(ref state);
+            m_query = state.Fluent().With<RootReference>(true).IncludePrefabs().IncludeDisabledEntities().Build();
+            m_query.SetOrderVersionFilter();
         }
 
         [BurstCompile]
         public void OnUpdate(ref SystemState state)
         {
             var api = this.GetApi(ref state);
-            new Job().ScheduleParallel(api);
+            new Job().Inject(api).ScheduleParallel(m_query);
         }
 
         [BurstCompile]
-        [IncludeDisabledEntities, IncludePrefabs]
-        partial struct Job : IJobEach
+        [WithOptions(EntityQueryOptions.IncludePrefab | EntityQueryOptions.IncludeDisabledEntities)]
+        partial struct Job : IJobEntity, IInjectable
         {
             [ReadOnly, Inject] public BufferLookup<EntityInHierarchy>        hierarchyLookup;
             [ReadOnly, Inject] public BufferLookup<EntityInHierarchyCleanup> cleanupLookup;

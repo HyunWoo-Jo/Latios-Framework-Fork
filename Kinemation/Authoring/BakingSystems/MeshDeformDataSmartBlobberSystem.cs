@@ -172,7 +172,7 @@ namespace Latios.Kinemation.Authoring.Systems
                     bindposesList.AddRange(bindposes.GetUnsafeReadOnlyPtr(), bindposes.Length);
                     builder.bindPoses = bindposesList;
                 }
-                bool requiresDeformWeights = (features & (MeshDeformDataFeatures.Deform | MeshDeformDataFeatures.VertexSkinning)) != MeshDeformDataFeatures.None;
+                bool requiresDeformWeights = (features & MeshDeformDataFeatures.Deform) != MeshDeformDataFeatures.None;
                 if (requiresDeformWeights && mesh.bindposeCount > 0)
                 {
                     var weightsArray = mesh.GetAllBoneWeights();
@@ -221,7 +221,7 @@ namespace Latios.Kinemation.Authoring.Systems
                             verticesCount = math.max(verticesCount, range.endIndex + 1);
                         }
                         builder.blendShapeBufferSize = verticesCount;
-                        var cpuBuffer                = new NativeArray<uint>(math.max(gpuBuffer.count * gpuBuffer.stride / sizeof(uint), (int)verticesCount * 10),
+                        var cpuBuffer                = new NativeArray<uint>(math.max(gpuBuffer.count, (int)verticesCount * 10),
                                                                              Allocator.Persistent,
                                                                              NativeArrayOptions.ClearMemory);
                         blendShapeRequests[index]       = UnityEngine.Rendering.AsyncGPUReadback.RequestIntoNativeArray(ref cpuBuffer, gpuBuffer);
@@ -250,12 +250,10 @@ namespace Latios.Kinemation.Authoring.Systems
                         UnityEngine.Debug.LogError($"An error occurred while obtaining the blend shapes for mesh {builders[i].name}");
                         var builder = builders[i];
                         blendShapeRequestBuffers[i].Dispose();
-                        blendShapeRequestBuffers[i]  = default;
-                        builder.blendShapeNames      = default;
-                        builder.blendShapeRanges     = default;
-                        builder.blendShapeBufferSize = default;
-                        builder.blendShapeVertices   = default;
-                        builders[i]                  = builder;
+                        blendShapeRequestBuffers[i] = default;
+                        builder.blendShapeNames     = default;
+                        builder.blendShapeRanges    = default;
+                        builders[i]                 = builder;
                     }
                     else
                     {
@@ -417,9 +415,6 @@ namespace Latios.Kinemation.Authoring.Systems
                         int weightStartCounter = 0;
                         for (int i = 0; i < verticesInBatch; i++)
                         {
-                            if (boneWeightCountsPerVertex[batchOffset + i] == 0)
-                                throw new System.InvalidOperationException(
-                                    $"Mesh {name} has a skinned vertex with no bone weights. The blob baking job has been terminated to avoid an infinite loop.");
                             // Find the first bone weight for each vertex in the batch in the source bone weights.
                             weightStartsPerCache[i]  = weightStartCounter;
                             weightStartCounter      += boneWeightCountsPerVertex[batchOffset + i];
@@ -457,9 +452,9 @@ namespace Latios.Kinemation.Authoring.Systems
 
                                 // Compute how much the vertex deviates from the bone it is targeting.
                                 // That deviation is applied to the maxRadialOffsets for that bone for culling.
-                                float3 boneSpacePosition              = math.transform(bindPoses[srcWeight.boneIndex], verticesToSkin[batchOffset + i].position);
+                                float3 boneSpacePosition              = math.transform(bindPoses[srcWeight.boneIndex], verticesToSkin[i].position);
                                 maxRadialOffsets[srcWeight.boneIndex] = math.max(maxRadialOffsets[srcWeight.boneIndex], math.length(boneSpacePosition));
-                                aabb                                  = Psyshock.Physics.CombineAabb(verticesToSkin[batchOffset + i].position, aabb);
+                                aabb                                  = Psyshock.Physics.CombineAabb(verticesToSkin[i].position, aabb);
 
                                 if (retireThisRound)
                                     threadsAlive--;
@@ -500,7 +495,7 @@ namespace Latios.Kinemation.Authoring.Systems
                             // That deviation is applied to the maxRadialOffsets for that bone for culling.
                             float3 boneSpacePosition              = math.transform(bindPoses[srcWeight.boneIndex], positionsArray[i]);
                             maxRadialOffsets[srcWeight.boneIndex] = math.max(maxRadialOffsets[srcWeight.boneIndex], math.length(boneSpacePosition));
-                            aabb                                  = Psyshock.Physics.CombineAabb(positionsArray[i], aabb);
+                            aabb                                  = Psyshock.Physics.CombineAabb(verticesToSkin[i].position, aabb);
                         }
                         weightsProcessed += weightsCount;
                     }
@@ -839,26 +834,25 @@ namespace Latios.Kinemation.Authoring.Systems
 
                     if (normalizationIsValid)
                     {
-                        var triangleCount                        = indicesCount / 3;
-                        blobRoot.normalizationData.triangleCount = triangleCount / 3;
+                        blobRoot.normalizationData.triangleCount = indicesCount / 3;
                         int indicesUintToAllocate                = 0;
                         switch (blobRoot.normalizationData.packMode)
                         {
                             case MeshNormalizationBlob.IndicesPackMode.Bits10:
-                                indicesUintToAllocate = triangleCount;
+                                indicesUintToAllocate = indicesCount;
                                 break;
                             case MeshNormalizationBlob.IndicesPackMode.Bits16:
-                                indicesUintToAllocate = triangleCount * 3 / 2 + (triangleCount * 3) % 2;
+                                indicesUintToAllocate = indicesCount * 3 / 2 + (indicesCount * 3 / 2) % 2;
                                 break;
                             case MeshNormalizationBlob.IndicesPackMode.Bits21:
-                                indicesUintToAllocate = triangleCount * 2;
+                                indicesUintToAllocate = indicesCount * 2;
                                 break;
                             case MeshNormalizationBlob.IndicesPackMode.Bits32:
-                                indicesUintToAllocate = triangleCount * 3;
+                                indicesUintToAllocate = indicesCount * 3;
                                 break;
                         }
                         var packedIndices = builder.Allocate(ref blobRoot.normalizationData.packedIndicesByTriangle, indicesUintToAllocate);
-                        for (int i = 0; i < triangleCount; i++)
+                        for (int i = 0; i < indicesCount / 3; i++)
                         {
                             int indexA = context.intCache[3 * i];
                             int indexB = context.intCache[3 * i + 1];

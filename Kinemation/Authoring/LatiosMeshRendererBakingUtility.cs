@@ -205,7 +205,6 @@ namespace Latios.Kinemation.Authoring
                     mmsBuffer.Capacity = s_validIndexCache.Count;
 
                     s_bakingStreamingTextureCache.Clear();
-                    s_bakingStreamingTextureMeshUv0MetricCache.Clear();
                     foreach (var i in s_validIndexCache)
                     {
                         var src = meshMaterialSubmeshes[i];
@@ -254,14 +253,12 @@ namespace Latios.Kinemation.Authoring
         internal static DeformClassification GetDeformClassificationFromMaterial(Material material)
         {
             DeformClassification classification = DeformClassification.None;
-            if (material == null)
-                return classification;
             if (material.HasProperty(s_legacyLbsProperty))
                 classification |= DeformClassification.LegacyLbs;
             if (material.HasProperty(s_legacyComputeDeformProperty))
                 classification |= DeformClassification.LegacyCompute;
             if (material.HasProperty(s_legacyDotsDeformProperty))
-                classification |= DeformClassification.LegacyDotsDeform;
+                classification |= DeformClassification.LegacyDotsDefom;
             if (material.HasProperty(s_currentVertexMatrixProperty))
                 classification |= DeformClassification.CurrentVertexMatrix;
             if (material.HasProperty(s_previousVertexMatrixProperty))
@@ -356,7 +353,7 @@ namespace Latios.Kinemation.Authoring
                 materialPropertyTypesToAdd.Add(ComponentType.ReadWrite<LegacyLinearBlendSkinningShaderIndex>());
             if ((classification & DeformClassification.LegacyCompute) != DeformClassification.None)
                 materialPropertyTypesToAdd.Add(ComponentType.ReadWrite<LegacyComputeDeformShaderIndex>());
-            if ((classification & DeformClassification.LegacyDotsDeform) != DeformClassification.None)
+            if ((classification & DeformClassification.LegacyDotsDefom) != DeformClassification.None)
                 materialPropertyTypesToAdd.Add(ComponentType.ReadWrite<LegacyDotsDeformParamsShaderIndex>());
             if ((classification & DeformClassification.CurrentVertexMatrix) != DeformClassification.None)
                 materialPropertyTypesToAdd.Add(ComponentType.ReadWrite<CurrentMatrixVertexSkinningShaderIndex>());

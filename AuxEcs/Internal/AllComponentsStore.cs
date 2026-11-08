@@ -44,7 +44,6 @@ namespace Latios.AuxEcs
             var hash = BurstRuntime.GetHashCode64<T>();
             if (typeHashToComponentIndexMap.TryGetValue(hash, out typeId))
                 return componentStores.Ptr + typeId;
-            typeId = -1;
             return null;
         }
 

@@ -54,8 +54,6 @@ namespace Latios.Transforms.Systems
             var worldTransformOrderVersion       = state.EntityManager.GetComponentOrderVersion<WorldTransform>();
             var tickedWorldTransformOrderVersion = state.EntityManager.GetComponentOrderVersion<TickedWorldTransform>();
 
-            m_rootsQuery.ResetFilter();
-            m_childrenQuery.ResetFilter();
             var rootCount        = m_rootsQuery.CalculateEntityCountWithoutFiltering();
             var roots            = CollectionHelper.CreateNativeArray<LiveTransformCapture.Root>(rootCount, state.WorldUpdateAllocator, NativeArrayOptions.UninitializedMemory);
             var rootStartIndices = m_rootsQuery.CalculateBaseEntityIndexArray(state.WorldUpdateAllocator);
@@ -106,8 +104,9 @@ namespace Latios.Transforms.Systems
 
                 somethingChanged = rootsChangedStructurally || childrenChangedStructurally || worldTransformsChangedStructurally || tickedTransformsChangedStructurally ||
                                    hierarchyBuffersChanged || rootReferencesChanged || worldTransformsChanged || tickedTransformsChanged;
-            }
 
+                m_firstUpdate = false;
+            }
             api.worldBlackboardEntity.SetCollectionComponentAndDisposeOld(new LiveTransformCapture
             {
                 roots                            = roots,
@@ -119,7 +118,6 @@ namespace Latios.Transforms.Systems
                 tickedWorldTransformOrderVersion = tickedWorldTransformOrderVersion,
                 cleanEditorWorld                 = editorWorld && !hasDynamicParents && !somethingChanged
             });
-            m_firstUpdate = false;
         }
 
         [BurstCompile]

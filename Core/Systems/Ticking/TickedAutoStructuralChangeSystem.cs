@@ -34,68 +34,46 @@ namespace Latios.Systems
                 }
                 if (attribute == null)
                     continue;
-                if (attribute.referenceType == null)
+                if (attribute.nonTickedType == null)
                     continue;
 
-                TypeIndex referenceTypeIndex = default;
+                TypeIndex nonTickedTypeIndex = default;
                 try
                 {
-                    referenceTypeIndex = TypeManager.GetTypeIndex(attribute.referenceType);
+                    nonTickedTypeIndex = TypeManager.GetTypeIndex(attribute.nonTickedType);
                 }
                 catch
                 {
                     throw new System.InvalidOperationException(
-                        $"On {typeInfo.Type.FullName}, the TickedAutoAdd attribute specifies a non-ticked type {attribute.referenceType.FullName} which is not a known component type.");
+                        $"On {typeInfo.Type.FullName}, the TickedAutoAdd attribute specifies a non-ticked type {attribute.nonTickedType.FullName} which is not a known component type.");
                 }
 
-                var referenceType = ComponentType.FromTypeIndex(referenceTypeIndex);
-                var tickingType   = ComponentType.FromTypeIndex(typeInfo.TypeIndex);
+                var nonTickingType = ComponentType.FromTypeIndex(nonTickedTypeIndex);
+                var tickingType    = ComponentType.FromTypeIndex(typeInfo.TypeIndex);
                 if (attribute.copyData)
                 {
-                    var nonTickedInfo = TypeManager.GetTypeInfo(referenceTypeIndex);
-                    if (typeInfo.ElementSize != nonTickedInfo.ElementSize || typeInfo.TypeIndex.IsBuffer != referenceTypeIndex.IsBuffer ||
-                        typeInfo.TypeIndex.IsEnableable != referenceTypeIndex.IsEnableable || typeInfo.TypeIndex.IsSharedComponentType || typeInfo.TypeIndex.IsManagedType)
+                    var nonTickedInfo = TypeManager.GetTypeInfo(nonTickedTypeIndex);
+                    if (typeInfo.ElementSize != nonTickedInfo.ElementSize || typeInfo.TypeIndex.IsBuffer != nonTickedTypeIndex.IsBuffer ||
+                        typeInfo.TypeIndex.IsEnableable != nonTickedTypeIndex.IsEnableable || typeInfo.TypeIndex.IsSharedComponentType || typeInfo.TypeIndex.IsManagedType)
                     {
                         throw new System.InvalidOperationException(
-                            $"On {typeInfo.Type.FullName}, the TickedAutoAdd attribute specifies a non-ticked type {attribute.referenceType.FullName} which is not compatible for data copying either due to wrong component type or mismatched size.");
+                            $"On {typeInfo.Type.FullName}, the TickedAutoAdd attribute specifies a non-ticked type {attribute.nonTickedType.FullName} which is not compatible for data copying either due to wrong component type or mismatched size.");
                     }
                 }
-                if (attribute.removeReferenceForTickedOnly)
+                typePairStates.Add(new TypePairState
                 {
-                    typePairStates.Add(new TypePairState
-                    {
-                        referenceType       = referenceType,
-                        tickingType         = tickingType,
-                        referenceHandle     = attribute.copyData ? state.GetDynamicComponentTypeHandle(referenceType) : default,
-                        tickingHandle       = attribute.copyData ? state.GetDynamicComponentTypeHandle(tickingType) : default,
-                        missingTickingQuery = state.Fluent().With<TickedEntityTag>(true).With(referenceTypeIndex, !attribute.copyData).Without(typeInfo.TypeIndex)
-                                              .IncludeDisabledEntities().IncludePrefabs().Build(),
-                        missingReferenceQuery = state.Fluent().Without<TickingOnlyEntityTag>().With(typeInfo.TypeIndex, !attribute.copyData).Without(referenceTypeIndex)
-                                                .IncludeDisabledEntities().IncludePrefabs().Build(),
-                        removeTickingQuery   = state.Fluent().Without<TickedEntityTag>().With(typeInfo.TypeIndex, true).IncludeDisabledEntities().IncludePrefabs().Build(),
-                        removeReferenceQuery = state.Fluent().With<TickingOnlyEntityTag>().With(referenceTypeIndex,
-                                                                                                true).IncludeDisabledEntities().IncludePrefabs().Build(),
-                        copyData                     = attribute.copyData,
-                        removeReferenceInTickingOnly = true,
-                    });
-                }
-                else
-                {
-                    typePairStates.Add(new TypePairState
-                    {
-                        referenceType       = referenceType,
-                        tickingType         = tickingType,
-                        referenceHandle     = attribute.copyData ? state.GetDynamicComponentTypeHandle(ComponentType.ReadOnly(referenceTypeIndex)) : default,
-                        tickingHandle       = attribute.copyData ? state.GetDynamicComponentTypeHandle(tickingType) : default,
-                        missingTickingQuery = state.Fluent().With<TickedEntityTag>(true).With(referenceTypeIndex, !attribute.copyData).Without(typeInfo.TypeIndex)
-                                              .IncludeDisabledEntities().IncludePrefabs().Build(),
-                        missingReferenceQuery        = state.Fluent().Without(referenceTypeIndex).With(typeInfo.TypeIndex, true).IncludeDisabledEntities().IncludePrefabs().Build(),
-                        removeTickingQuery           = state.Fluent().Without<TickedEntityTag>().With(typeInfo.TypeIndex, true).IncludeDisabledEntities().IncludePrefabs().Build(),
-                        removeReferenceQuery         = default,
-                        copyData                     = attribute.copyData,
-                        removeReferenceInTickingOnly = false
-                    });
-                }
+                    nonTickingType      = nonTickingType,
+                    tickingType         = tickingType,
+                    nonTickingHandle    = attribute.copyData ? state.GetDynamicComponentTypeHandle(nonTickingType) : default,
+                    tickingHandle       = attribute.copyData ? state.GetDynamicComponentTypeHandle(tickingType) : default,
+                    missingTickingQuery = state.Fluent().With<TickedEntityTag>(true).With(nonTickedTypeIndex, !attribute.copyData).Without(
+                        typeInfo.TypeIndex).IncludeDisabledEntities().IncludePrefabs().Build(),
+                    missingNormalQuery = state.Fluent().Without<TickingOnlyEntityTag>().With(typeInfo.TypeIndex, !attribute.copyData).Without(
+                        nonTickedTypeIndex).IncludeDisabledEntities().IncludePrefabs().Build(),
+                    removeTickingQuery = state.Fluent().Without<TickedEntityTag>().With(typeInfo.TypeIndex, true).IncludeDisabledEntities().IncludePrefabs().Build(),
+                    removeNormalQuery  = state.Fluent().With<TickingOnlyEntityTag>().With(nonTickedTypeIndex, true).IncludeDisabledEntities().IncludePrefabs().Build(),
+                    copyData           = attribute.copyData
+                });
             }
         }
 
@@ -116,11 +94,11 @@ namespace Latios.Systems
                     {
                         var entities = typePairState.missingTickingQuery.ToEntityArray(state.WorldUpdateAllocator);
                         state.EntityManager.AddComponent(typePairState.missingTickingQuery, typePairState.tickingType);
+                        typePairState.nonTickingHandle.Update(ref state);
+                        typePairState.tickingHandle.Update(ref state);
                         var writeHandle = typePairState.tickingHandle;
-                        var readHandle  = typePairState.removeReferenceInTickingOnly ? typePairState.referenceHandle.CopyToReadOnly() : typePairState.referenceHandle;
-                        writeHandle.Update(ref state);
-                        readHandle.Update(ref state);
-                        var typeSize = TypeManager.GetTypeInfo(typePairState.tickingType.TypeIndex).ElementSize;
+                        var readHandle  = typePairState.nonTickingHandle.CopyToReadOnly();
+                        var typeSize    = TypeManager.GetTypeInfo(typePairState.tickingType.TypeIndex).ElementSize;
                         if (typePairState.tickingType.IsBuffer)
                         {
                             foreach (var entity in entities)
@@ -148,7 +126,7 @@ namespace Latios.Systems
                         {
                             foreach (var entity in entities)
                             {
-                                bool enabled = state.EntityManager.IsComponentEnabled(entity, typePairState.referenceType);
+                                bool enabled = state.EntityManager.IsComponentEnabled(entity, typePairState.nonTickingType);
                                 state.EntityManager.SetComponentEnabled(entity, typePairState.tickingType, enabled);
                             }
                         }
@@ -158,21 +136,17 @@ namespace Latios.Systems
                         state.EntityManager.AddComponent(typePairState.missingTickingQuery, typePairState.tickingType);
                     }
                 }
-                if (!typePairState.missingReferenceQuery.IsEmptyIgnoreFilter)
+                if (!typePairState.missingNormalQuery.IsEmptyIgnoreFilter)
                 {
-                    if (!typePairState.removeReferenceInTickingOnly)
+                    if (typePairState.copyData)
                     {
-                        state.EntityManager.RemoveComponent(typePairState.missingReferenceQuery, typePairState.tickingType);
-                    }
-                    else if (typePairState.copyData)
-                    {
-                        var entities = typePairState.missingReferenceQuery.ToEntityArray(state.WorldUpdateAllocator);
-                        state.EntityManager.AddComponent(typePairState.missingReferenceQuery, typePairState.referenceType);
-                        var writeHandle = typePairState.referenceHandle;
+                        var entities = typePairState.missingNormalQuery.ToEntityArray(state.WorldUpdateAllocator);
+                        state.EntityManager.AddComponent(typePairState.missingNormalQuery, typePairState.nonTickingType);
+                        typePairState.nonTickingHandle.Update(ref state);
+                        typePairState.tickingHandle.Update(ref state);
+                        var writeHandle = typePairState.nonTickingHandle;
                         var readHandle  = typePairState.tickingHandle.CopyToReadOnly();
-                        writeHandle.Update(ref state);
-                        readHandle.Update(ref state);
-                        var typeSize = TypeManager.GetTypeInfo(typePairState.tickingType.TypeIndex).ElementSize;
+                        var typeSize    = TypeManager.GetTypeInfo(typePairState.tickingType.TypeIndex).ElementSize;
                         if (typePairState.tickingType.IsBuffer)
                         {
                             foreach (var entity in entities)
@@ -201,38 +175,37 @@ namespace Latios.Systems
                             foreach (var entity in entities)
                             {
                                 bool enabled = state.EntityManager.IsComponentEnabled(entity, typePairState.tickingType);
-                                state.EntityManager.SetComponentEnabled(entity, typePairState.referenceType, enabled);
+                                state.EntityManager.SetComponentEnabled(entity, typePairState.nonTickingType, enabled);
                             }
                         }
                     }
                     else
                     {
-                        state.EntityManager.AddComponent(typePairState.missingReferenceQuery, typePairState.referenceType);
+                        state.EntityManager.AddComponent(typePairState.missingTickingQuery, typePairState.tickingType);
                     }
                 }
                 if (!typePairState.removeTickingQuery.IsEmptyIgnoreFilter)
                 {
                     state.EntityManager.RemoveComponent(typePairState.removeTickingQuery, typePairState.tickingType);
                 }
-                if (typePairState.removeReferenceInTickingOnly && !typePairState.removeReferenceQuery.IsEmptyIgnoreFilter)
+                if (!typePairState.removeNormalQuery.IsEmptyIgnoreFilter)
                 {
-                    state.EntityManager.RemoveComponent(typePairState.removeReferenceQuery, typePairState.referenceType);
+                    state.EntityManager.RemoveComponent(typePairState.removeNormalQuery, typePairState.nonTickingType);
                 }
             }
         }
 
         struct TypePairState
         {
-            public ComponentType              referenceType;
+            public ComponentType              nonTickingType;
             public ComponentType              tickingType;
             public EntityQuery                missingTickingQuery;
-            public EntityQuery                missingReferenceQuery;
+            public EntityQuery                missingNormalQuery;
             public EntityQuery                removeTickingQuery;
-            public EntityQuery                removeReferenceQuery;
-            public DynamicComponentTypeHandle referenceHandle;
+            public EntityQuery                removeNormalQuery;
+            public DynamicComponentTypeHandle nonTickingHandle;
             public DynamicComponentTypeHandle tickingHandle;
             public bool                       copyData;
-            public bool                       removeReferenceInTickingOnly;
         }
     }
 }

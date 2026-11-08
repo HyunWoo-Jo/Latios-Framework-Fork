@@ -63,10 +63,7 @@ namespace Latios.Unika.Authoring.Systems
                 combineTargetsCache.Clear();
 
                 if (!hashmap.TryGetFirstValue(entity, out var bakingEntity, out var iter))
-                {
-                    scriptsBuffer.Clear();
                     return;
-                }
 
                 do
                 {

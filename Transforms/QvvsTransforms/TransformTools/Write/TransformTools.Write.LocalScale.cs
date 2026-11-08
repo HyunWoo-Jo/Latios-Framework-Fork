@@ -64,7 +64,7 @@ namespace Latios.Transforms
                 refRW.ValueRW.worldTransform           = currentTransform;
                 return;
             }
-            SetLocalScale(handle, newLocalScale, key, ref componentBroker);
+            SetLocalScale(handle, newLocalScale, ref componentBroker);
         }
 
         /// <summary>
@@ -185,13 +185,13 @@ namespace Latios.Transforms
             var handle = GetHierarchyHandle(entity, ref rootReferenceLookupRO, ref entityInHierarchyLookupRO, ref entityInHierarchyCleanupLookupRO);
             if (handle.isNull)
             {
-                RefRW<WorldTransform> refRW            = transformLookupRW.GetCheckedLookup(entity, key).GetRefRW(entity);
+                RefRW<WorldTransform> refRW            = transformLookupRW.GetCheckedLookup(handle.root.entity, key).GetRefRW(entity);
                 TransformQvvs         currentTransform = refRW.ValueRO.worldTransform;
                 currentTransform.scale                 = newLocalScale;
                 refRW.ValueRW.worldTransform           = currentTransform;
                 return;
             }
-            SetLocalScale(handle, newLocalScale, ref transformLookupRW.GetCheckedLookup(handle.root.entity, key), ref entityStorageInfoLookup);
+            SetLocalScale(handle, newLocalScale, ref transformLookupRW.GetCheckedLookup(entity, key), ref entityStorageInfoLookup);
         }
 
         /// <summary>
@@ -261,9 +261,9 @@ namespace Latios.Transforms
             var handle = GetHierarchyHandle(entity, entityManager);
             if (handle.isNull)
             {
-                TransformQvvs currentTransform                                                   = entityManager.GetComponentData<TickedWorldTransform>(entity).worldTransform;
-                currentTransform.scale                                                           = newLocalScale;
-                entityManager.SetComponentData(entity, new TickedWorldTransform { worldTransform = currentTransform });
+                TransformQvvs currentTransform                                             = entityManager.GetComponentData<WorldTransform>(entity).worldTransform;
+                currentTransform.scale                                                     = newLocalScale;
+                entityManager.SetComponentData(entity, new WorldTransform { worldTransform = currentTransform });
                 return;
             }
             SetTickedLocalScale(handle, newLocalScale, entityManager);
@@ -307,7 +307,7 @@ namespace Latios.Transforms
                 refRW.ValueRW.worldTransform                 = currentTransform;
                 return;
             }
-            SetTickedLocalScale(handle, newLocalScale, key, ref componentBroker);
+            SetTickedLocalScale(handle, newLocalScale, ref componentBroker);
         }
 
         /// <summary>
@@ -341,7 +341,7 @@ namespace Latios.Transforms
         {
             if (handle.isCopyParent)
                 return;
-            ref var                      lookup     = ref TickedComponentBrokerAccess.From(ref componentBroker);
+            ref var                      lookup     = ref ComponentBrokerAccess.From(ref componentBroker);
             Span<TransformQvvs>          transforms = stackalloc TransformQvvs[] { new TransformQvvs { scale = newLocalScale } };
             Span<Propagate.WriteCommand> commands   =
                 stackalloc Propagate.WriteCommand[] { new Propagate.WriteCommand
@@ -364,7 +364,7 @@ namespace Latios.Transforms
             if (handle.isCopyParent)
                 return;
             key.Validate(handle.root.entity);
-            ref var                      lookup     = ref TickedComponentBrokerParallelAccess.From(ref componentBroker);
+            ref var                      lookup     = ref ComponentBrokerParallelAccess.From(ref componentBroker);
             Span<TransformQvvs>          transforms = stackalloc TransformQvvs[] { new TransformQvvs { scale = newLocalScale } };
             Span<Propagate.WriteCommand> commands   =
                 stackalloc Propagate.WriteCommand[] { new Propagate.WriteCommand
@@ -428,13 +428,13 @@ namespace Latios.Transforms
             var handle = GetHierarchyHandle(entity, ref rootReferenceLookupRO, ref entityInHierarchyLookupRO, ref entityInHierarchyCleanupLookupRO);
             if (handle.isNull)
             {
-                RefRW<TickedWorldTransform> refRW            = transformLookupRW.GetCheckedLookup(entity, key).GetRefRW(entity);
+                RefRW<TickedWorldTransform> refRW            = transformLookupRW.GetCheckedLookup(handle.root.entity, key).GetRefRW(entity);
                 TransformQvvs               currentTransform = refRW.ValueRO.worldTransform;
                 currentTransform.scale                       = newLocalScale;
                 refRW.ValueRW.worldTransform                 = currentTransform;
                 return;
             }
-            SetTickedLocalScale(handle, newLocalScale, ref transformLookupRW.GetCheckedLookup(handle.root.entity, key), ref entityStorageInfoLookup);
+            SetTickedLocalScale(handle, newLocalScale, ref transformLookupRW.GetCheckedLookup(entity, key), ref entityStorageInfoLookup);
         }
 
         /// <summary>

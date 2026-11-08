@@ -1,7 +1,6 @@
 using System;
 using System.Collections.Generic;
 using System.Linq;
-using Latios.Transforms;
 using Unity.Collections;
 using Unity.Entities;
 using Unity.Entities.Hybrid.Baking;
@@ -162,11 +161,6 @@ namespace Latios.Kinemation.Authoring
         /// </summary>
         public bool isSpeedTree;
 
-        /// <summary>
-        /// The world-space LOD reference point of the LOD Group
-        /// </summary>
-        public float3 lodGroupReferencePoint;
-
         public bool Equals(LodSettings other)
         {
             return localHeight.Equals(other.localHeight) &&
@@ -175,8 +169,7 @@ namespace Latios.Kinemation.Authoring
                    minScreenHeightPercentAtCrossfadeEdge.Equals(other.minScreenHeightPercentAtCrossfadeEdge) &&
                    maxScreenHeightPercentAtCrossfadeEdge.Equals(other.maxScreenHeightPercentAtCrossfadeEdge) &&
                    lowestResLodLevel.Equals(other.lowestResLodLevel) &&
-                   isSpeedTree.Equals(other.isSpeedTree) &&
-                   lodGroupReferencePoint.Equals(other.lodGroupReferencePoint);
+                   isSpeedTree.Equals(other.isSpeedTree);
         }
     }
 
@@ -234,7 +227,7 @@ namespace Latios.Kinemation.Authoring
                                                         byte lodMask        = MeshMaterialSubmeshSettings.kDefaultLodMask,
                                                         bool clampSubmeshes = true)
         {
-            if (sharedMaterials == null || sharedMaterials.Count == 0)
+            if (sharedMaterials == null)
                 return;
 
             if (dst.Length < sharedMaterials.Count)
@@ -400,14 +393,12 @@ namespace Latios.Kinemation.Authoring
                 var rendererTransform = baker.GetComponent<Transform>(renderer);
                 var groupTransform    = baker.GetComponent<Transform>(group);
                 var relativeTransform = Transforms.Authoring.Abstract.AbstractBakingUtilities.ExtractTransformRelativeTo(rendererTransform, groupTransform);
-                // If the renderer isn't co-located with the LOD Group, we are probably dealing with an HLOD setup.
-                // The trick to avoid an entity lookup at runtime is to bake the reference point in the renderer's
-                // own local space. If the renderer is static relative to the HLOD root, this allows the whole HLOD
-                // root to be moved without extra lookups. If the renderer is dynamic, then the result is silently
-                // slightly wrong compared to Unity, but is probably close enough that no one will notice.
-                var referencePoint                 = (float3)groupTransform.TransformPoint(group.localReferencePoint);
-                lodSettings.lodGroupReferencePoint = referencePoint;
-                lodSettings.localHeight            = group.size / math.cmax(relativeTransform.scale * relativeTransform.stretch);
+                if (math.lengthsq(relativeTransform.position) > math.EPSILON)
+                {
+                    Debug.LogWarning(
+                        $"LOD renderer {renderer.gameObject.name} has a different world position than the LOD Group {group.gameObject.name} it belongs to. This is currently not supported and artifacts may occur. If you are seeing this message, please report it to the Latios Framework developers so that we can better understand your use case.");
+                }
+                lodSettings.localHeight = group.size / math.cmax(relativeTransform.scale * relativeTransform.stretch);
             }
         }
 
@@ -435,9 +426,6 @@ namespace Latios.Kinemation.Authoring
                     lodSettings.minScreenHeightPercent *= new half(-1f);
                 if (negMax)
                     lodSettings.maxScreenHeightPercent *= new half(-1f);
-
-                baker.AddComponent(                        targetEntity, new BakingLodGroupReferencePoint { worldPosition = lodSettings.lodGroupReferencePoint });
-                baker.AddComponent<LodGroupReferencePoint>(targetEntity);
 
                 if (lodSettings.minScreenHeightPercentAtCrossfadeEdge > 0f || lodSettings.maxScreenHeightPercentAtCrossfadeEdge > 0f)
                 {
@@ -497,8 +485,7 @@ namespace Latios.Kinemation.Authoring
             var mesh       = (meshFilter != null) ? GetComponent<MeshFilter>().sharedMesh : null;
 
             m_materialsCache.Clear();
-            if (mesh != null)
-                authoring.GetSharedMaterials(m_materialsCache);
+            authoring.GetSharedMaterials(m_materialsCache);
 
             var entity = GetEntity(TransformUsageFlags.Renderable);
             RenderingBakingTools.GetLOD(this, authoring, out var lodSettings);
@@ -528,44 +515,35 @@ namespace Latios.Kinemation.Authoring
                 else
                     totalMms += m_materialsCache.Count;
             }
-            if (totalMms == 0)
-                return;
-            Span<MeshMaterialSubmeshSettings> mms            = stackalloc MeshMaterialSubmeshSettings[totalMms];
-            var                               meshWithBounds = mesh;
+            Span<MeshMaterialSubmeshSettings> mms = stackalloc MeshMaterialSubmeshSettings[totalMms];
             if (lodAppend != null)
             {
                 var lod0 = mms.Slice(0, m_materialsCache.Count);
                 RenderingBakingTools.ExtractMeshMaterialSubmeshes(lod0, mesh, m_materialsCache, 0x01);
                 if (!lodAppend1Null)
                 {
-                    if ((mesh == null || lodAppend.lod1Mesh.subMeshCount != mesh.subMeshCount) && !lodAppend.useOverrideMaterialsForLod1)
+                    if (lodAppend.lod1Mesh.subMeshCount != mesh.subMeshCount && !lodAppend.useOverrideMaterialsForLod1)
                     {
-                        string meshName = mesh != null ? mesh.name : "null";
                         UnityEngine.Debug.LogWarning(
-                            $"In {authoring.gameObject.name}, lod1Mesh {lodAppend.lod1Mesh.name} has a different submesh count {lodAppend.lod1Mesh.subMeshCount} than the main mesh {meshName} count {mesh.subMeshCount}, but does not use override materials. This will often lead to incorrect rendering.");
+                            $"In {authoring.gameObject.name}, lod1Mesh {lodAppend.lod1Mesh.name} has a different submesh count {lodAppend.lod1Mesh.subMeshCount} than the main mesh {mesh.name} count {mesh.subMeshCount}, but does not use override materials. This will often lead to incorrect rendering.");
                     }
 
                     var lod1     = mms.Slice(m_materialsCache.Count, lodAppend1Count);
                     var lod1Mats = lodAppend.useOverrideMaterialsForLod1 ? lodAppend.overrideMaterialsForLod1 : m_materialsCache;
                     RenderingBakingTools.ExtractMeshMaterialSubmeshes(lod1, lodAppend.lod1Mesh, lod1Mats, (byte)(lodAppend.enableLod2 ? 0x02 : 0xfe));
-                    if (meshWithBounds == null)
-                        meshWithBounds = lodAppend.lod1Mesh;
                 }
 
                 if (!lodAppend2Null)
                 {
-                    if ((mesh == null || lodAppend.lod2Mesh.subMeshCount != mesh.subMeshCount) && !lodAppend.useOverrideMaterialsForLod2)
+                    if (lodAppend.lod2Mesh.subMeshCount != mesh.subMeshCount && !lodAppend.useOverrideMaterialsForLod2)
                     {
-                        string meshName = mesh != null ? mesh.name : "null";
                         UnityEngine.Debug.LogWarning(
-                            $"In {authoring.gameObject.name}, lod2Mesh {lodAppend.lod2Mesh.name} has a different submesh count {lodAppend.lod2Mesh.subMeshCount} than the main mesh {meshName} count {mesh.subMeshCount}, but does not use override materials. This will often lead to incorrect rendering.");
+                            $"In {authoring.gameObject.name}, lod2Mesh {lodAppend.lod2Mesh.name} has a different submesh count {lodAppend.lod2Mesh.subMeshCount} than the main mesh {mesh.name} count {mesh.subMeshCount}, but does not use override materials. This will often lead to incorrect rendering.");
                     }
 
                     var lod2     = mms.Slice(m_materialsCache.Count + lodAppend1Count);
                     var lod2Mats = lodAppend.useOverrideMaterialsForLod2 ? lodAppend.overrideMaterialsForLod2 : m_materialsCache;
                     RenderingBakingTools.ExtractMeshMaterialSubmeshes(lod2, lodAppend.lod2Mesh, lod2Mats, 0xfc);
-                    if (meshWithBounds == null)
-                        meshWithBounds = lodAppend.lod2Mesh;
                 }
             }
             else
@@ -621,7 +599,7 @@ namespace Latios.Kinemation.Authoring
                 lightmapIndex               = authoring.lightmapIndex,
                 lightmapScaleOffset         = authoring.lightmapScaleOffset,
                 isStatic                    = IsStatic(),
-                localBounds                 = meshWithBounds.bounds,
+                localBounds                 = mesh != null ? mesh.bounds : default,
                 rendererPriority            = authoring.rendererPriority,
 #if UNITY_6000_2_OR_NEWER
                 meshLodRendererBias = authoring.meshLodSelectionBias,

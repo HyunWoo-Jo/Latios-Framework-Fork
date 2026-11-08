@@ -30,7 +30,8 @@ namespace Latios
     /// </remarks>
     /// <typeparam name="TKey"></typeparam>
     /// <typeparam name="TValue"></typeparam>
-    public struct DynamicHashMap<TKey, TValue> where TKey : unmanaged, IEquatable<TKey> where TValue : unmanaged
+    public struct DynamicHashMap<TKey, TValue> : IEnumerable<(TKey, TValue)>
+        where TKey : unmanaged, IEquatable<TKey> where TValue : unmanaged
     {
         #region Construction
         /// <summary>
@@ -78,13 +79,7 @@ namespace Latios
         /// <summary>
         /// Removes all elements from the hashmap.
         /// </summary>
-        public void Clear()
-        {
-            m_buffer.Clear();
-            m_count    = 0;
-            m_capacity = 2;
-            m_mask     = 0;
-        }
+        public void Clear() => m_buffer.Clear();
 
         /// <summary>
         /// Ensure that the hashmap can contain the number of elements requested,
@@ -99,16 +94,14 @@ namespace Latios
             if (requiredCapacity * 2 <= m_capacity)
                 return;
 
-            var newCapacity = math.max(2, math.ceilpow2(requiredCapacity * 2));  // * 2 so that all elements with same hash still fit
             if (isEmpty)
             {
-                m_capacity = newCapacity;
-                m_buffer.Clear();
+                m_capacity = math.max(2, math.ceilpow2(requiredCapacity));
                 Tidy();
                 return;
             }
 
-            ReallocUp(newCapacity);
+            ReallocUp(math.max(2, math.ceilpow2(requiredCapacity)));
         }
 
         /// <summary>
@@ -280,6 +273,13 @@ namespace Latios
         public Enumerator GetEnumerator() => new Enumerator {
             m_enumerator = m_buffer.GetEnumerator()
         };
+
+        IEnumerator IEnumerable.GetEnumerator() {
+            throw new NotImplementedException();
+        }
+        IEnumerator<(TKey, TValue)> IEnumerable<(TKey, TValue)>.GetEnumerator() {
+            throw new NotImplementedException();
+        }
 
         /// <summary>
         /// The type which should be the only field inside an IBufferElementData for the corresponding DynamicHashMap.

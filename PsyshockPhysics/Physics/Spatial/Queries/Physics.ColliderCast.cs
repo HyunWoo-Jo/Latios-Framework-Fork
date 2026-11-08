@@ -2,6 +2,7 @@
 using System.Diagnostics;
 using Latios.Transforms;
 using Unity.Mathematics;
+using UnityEditor;
 
 namespace Latios.Psyshock
 {

@@ -71,15 +71,13 @@ namespace Latios
                 var type = system.GetManagedType();
                 if (type.Namespace == null)
                 {
-                    if (type.Assembly.FullName.Contains("Unity"))
+                    if (!silenceWarnings && type.Assembly.FullName.Contains("Unity"))
                     {
-                        if (!silenceWarnings)
-                            Debug.LogWarning($"Hey Unity Devs! You forgot a namespace for {type}");
+                        Debug.LogWarning($"Hey Unity Devs! You forgot a namespace for {type}");
                     }
-                    else if (type.Assembly.FullName.Contains("Havok"))
+                    else if (!silenceWarnings && type.Assembly.FullName.Contains("Havok"))
                     {
-                        if (!silenceWarnings)
-                            Debug.LogWarning($"Hey Havok Devs! You forgot a namespace for {type}");
+                        Debug.LogWarning($"Hey Havok Devs! You forgot a namespace for {type}");
                     }
                     else
                         continue;
@@ -222,8 +220,6 @@ namespace Latios
             {
                 newSystem.systemHandle = world.GetOrCreateSystem(type);
             }
-            if (TypeManager.GetSystemAttributes(type.GetManagedType(), typeof(NoGroupInjectionAttribute)).Length > 0)
-                return newSystem;
             if (groups.Length == 0 && defaultGroup != null)
             {
                 if (isManaged)
@@ -233,6 +229,9 @@ namespace Latios
             }
             foreach (var g in groups)
             {
+                if (TypeManager.GetSystemAttributes(newSystem.GetType(), typeof(NoGroupInjectionAttribute)).Length > 0)
+                    break;
+
                 var group = FindOrCreateGroup(world, type, g, defaultGroup, groupRemap);
                 if (group != null)
                 {
@@ -273,11 +272,16 @@ namespace Latios
                 // Skip the built-in root-level system groups
                 var type = types[typesIndex];
 
-                if (TypeManager.GetSystemAttributes(type.GetManagedType(), typeof(NoGroupInjectionAttribute)).Length > 0)
-                    continue;
+                if (type.IsManaged)
+                {
+                    var managedSystem             = world.AsManagedSystem(system);
+                    var noUpdateInGroupAttributes = TypeManager.GetSystemAttributes(managedSystem.GetType(), typeof(NoGroupInjectionAttribute));
+                    if (noUpdateInGroupAttributes.Length > 0)
+                        continue;
+                }
 
                 var updateInGroupAttributes = type.GetUpdateInGroupTargets();
-                if (updateInGroupAttributes.Length == 0 && defaultGroup != null)
+                if (updateInGroupAttributes.Length == 0)
                 {
                     if (defaultGroup.SystemHandle != system)
                         defaultGroup.AddSystemToUpdateList(system);
@@ -384,7 +388,7 @@ namespace Latios
             {
                 if (IsGroup(system))
                     continue;
-                if (!typeof(ComponentSystemBase).IsAssignableFrom(system) && !typeof(ISystem).IsAssignableFrom(system))
+                if (!typeof(ComponentSystemBase).IsAssignableFrom(system))
                     continue;
                 foreach (var targetGroup in groupList)
                 {
@@ -472,7 +476,7 @@ namespace Latios
         /// Update the PlayerLoop to run simulation after rendering.
         /// </summary>
         /// <param name="world">World with root-level systems that need insertion into the player loop</param>
-        public static void AddWorldToCurrentPlayerLoopWithDelayedSimulation(LatiosWorld world)
+        public static void AddWorldToCurrentPlayerLoopWithDelayedSimulation(World world)
         {
             var playerLoop = PlayerLoop.GetCurrentPlayerLoop();
 
@@ -483,7 +487,6 @@ namespace Latios
                 var initializeationSystem          = world.GetExistingSystemManaged<InitializationSystemGroup>();
                 var manager                        = initializeationSystem.RateManager as LatiosInitializationSystemGroupManager;
                 manager.m_deferredSimulationSystem = system;
-                world.worldBlackboardEntity.AddComponent<UsesDeferredSimulationTag>();
 
                 ScriptBehaviourUpdateOrder.AppendSystemToPlayerLoop(initializeationSystem, ref playerLoop, typeof(Initialization));
                 // We add it here for visibility in tools. But really we don't update until EndOfFrame

@@ -32,9 +32,6 @@ namespace Latios.Psyshock
                 }
             }
 
-            if (world.layer.cellCount == 1)
-                return;
-
             var crossBucketIndex = IndexStrategies.CrossBucketIndex(world.layer.cellCount);
             AabbSweepBucket(in aabb, in world, world.GetBucket(crossBucketIndex), archetypeIndices, ref processor);
         }
@@ -127,7 +124,7 @@ namespace Latios.Psyshock
                     }
 
                     var node = context.tree[(int)currentFrame.currentIndex];
-                    if (context.qxmin > node.subtreeXmax)
+                    if (context.qxmin >= node.subtreeXmax)
                     {
                         currentFrameIndex--;
                         continue;
@@ -243,9 +240,6 @@ namespace Latios.Psyshock
                         m_bucketIjk.y = m_minBucket.y;
                         if (m_bucketIjk.x > m_maxBucket.x)
                         {
-                            // If there's only one cell (and therefore no cross-bucket), return now.
-                            if (m_result.layer.cellCount == 1)
-                                return false;
                             // Set the target bucket to the cross bucket by adding one to the max bucket
                             m_bucketIjk = m_world.layer.worldSubdivisionsPerAxis - 1;
                             m_bucketIjk.z++;
@@ -329,7 +323,7 @@ namespace Latios.Psyshock
                                 }
 
                                 var node = m_tree[(int)currentFrame.currentIndex];
-                                if (outer.m_qxmin > node.subtreeXmax)
+                                if (outer.m_qxmin >= node.subtreeXmax)
                                 {
                                     m_currentFrameIndex--;
                                     continue;

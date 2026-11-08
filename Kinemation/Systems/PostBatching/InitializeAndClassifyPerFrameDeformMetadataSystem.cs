@@ -90,7 +90,7 @@ namespace Latios.Kinemation.Systems
                     if (legacyComputeDeformChecker[chunk])
                         classification |= DeformClassification.LegacyCompute;
                     if (legacyDotsDeformChecker[chunk])
-                        classification |= DeformClassification.LegacyDotsDeform;
+                        classification |= DeformClassification.LegacyDotsDefom;
                     if (currentMatrixVertexChecker[chunk])
                         classification |= DeformClassification.CurrentVertexMatrix;
                     if (previousMatrixVertexChecker[chunk])
@@ -109,7 +109,7 @@ namespace Latios.Kinemation.Systems
                         classification |= DeformClassification.PreviousDeform;
                     if (twoAgoDeformChecker[chunk])
                         classification |= DeformClassification.TwoAgoDeform;
-                    var mask            = DeformClassification.LegacyCompute | DeformClassification.LegacyDotsDeform |
+                    var mask            = DeformClassification.LegacyCompute | DeformClassification.LegacyDotsDefom |
                                           DeformClassification.CurrentDeform | DeformClassification.PreviousDeform | DeformClassification.TwoAgoDeform;
                     bool hasDeformShader = (classification & mask) != DeformClassification.None;
                     if (hasDeformShader && hasDynamicMesh)

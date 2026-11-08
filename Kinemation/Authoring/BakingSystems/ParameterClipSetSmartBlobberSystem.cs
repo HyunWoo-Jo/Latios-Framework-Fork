@@ -289,11 +289,6 @@ namespace Latios.Kinemation.Authoring.Systems
     [BurstCompile]
     public partial struct ParameterClipSetSmartBlobberSystem : ISystem
     {
-        public void OnCreate(ref SystemState state)
-        {
-            new SmartBlobberTools<ParameterClipSetBlob>().Register(state.World);
-        }
-
         [BurstCompile]
         public void OnUpdate(ref SystemState state)
         {
@@ -348,9 +343,8 @@ namespace Latios.Kinemation.Authoring.Systems
                     ClipEventsBlobHelpers.Convert(ref dstClips[i].events, ref builder, events.GetSubArray(eventsReadSoFar, settings[i].eventCount));
                     eventsReadSoFar += settings[i].eventCount;
 
-                    var srcClipDataPacked  = samples.Reinterpret<float>().AsNativeArray().GetSubArray(samplesReadSoFar, parameterCount * settings[i].sampleCount);
-                    var srcClipErrors      = errors.Reinterpret<float>().AsNativeArray().GetSubArray(i * parameterCount, parameterCount);
-                    samplesReadSoFar      += parameterCount * settings[i].sampleCount;
+                    var srcClipDataPacked = samples.Reinterpret<float>().AsNativeArray().GetSubArray(samplesReadSoFar, parameterCount * settings[i].sampleCount);
+                    var srcClipErrors     = errors.Reinterpret<float>().AsNativeArray().GetSubArray(i * parameterCount, parameterCount);
 
                     var compressedClip = AclUnity.Compression.CompressScalarsClip(srcClipDataPacked, srcClipErrors, settings[i].sampleRate, settings[i].compressionLevel);
                     var compressedData = builder.Allocate(ref dstClips[i].compressedClipDataAligned16, compressedClip.sizeInBytes, 16);

@@ -64,7 +64,7 @@ namespace Latios.Kinemation.Systems
             if (dispatchData.isCustomGraphicsDispatch)
             {
                 var features = api.worldBlackboardEntity.GetComponentData<EnableUpdatingInCustomGraphics>();
-                if (!features.blendShapes)
+                if (!features.materialProperties)
                     return false;
             }
             return true;
@@ -263,7 +263,7 @@ namespace Latios.Kinemation.Systems
                         {
                             if (weightsCount == buffer.Length)
                             {
-                                currentPtr  = buffer.AsNativeArray().GetUnsafeReadOnlyPtr();
+                                currentPtr  = buffer.AsNativeArray().GetSubArray(weightsCount * currentRotation, weightsCount).GetUnsafeReadOnlyPtr();
                                 previousPtr = currentPtr;
                                 twoAgoPtr   = currentPtr;
                             }

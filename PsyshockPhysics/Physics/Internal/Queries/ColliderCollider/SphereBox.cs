@@ -20,8 +20,8 @@ namespace Latios.Psyshock
                                           in RigidTransform sphereTransform,
                                           float maxDistance)
         {
-            var    sphereCenterInWorldBoxRelative = sphereTransform.pos - boxTransform.pos + math.rotate(sphereTransform.rot, sphere.center);
-            float3 sphereCenterInBoxSpace         = math.InverseRotateFast(boxTransform.rot, sphereCenterInWorldBoxRelative);
+            var    sphereInBoxSpaceTransform = math.InverseTransformFast(in boxTransform, in sphereTransform);
+            float3 sphereCenterInBoxSpace    = math.transform(sphereInBoxSpaceTransform, sphere.center);
             Unity.Burst.CompilerServices.Hint.Assume(sphere.radius >= 0f);
             return PointRayBox.PointBoxWithin(sphereCenterInBoxSpace, in box, maxDistance + sphere.radius);
         }
@@ -33,13 +33,13 @@ namespace Latios.Psyshock
                                            float maxDistance,
                                            out ColliderDistanceResult result)
         {
-            var            sphereCenterInWorldBoxRelative = sphereTransform.pos - boxTransform.pos + math.rotate(sphereTransform.rot, sphere.center);
-            float3         sphereCenterInBoxSpace         = math.InverseRotateFast(boxTransform.rot, sphereCenterInWorldBoxRelative);
-            SphereCollider sphereInBoxSpace               = new SphereCollider(sphereCenterInBoxSpace, sphere.radius);
-            bool           hit                            = BoxSphereDistance(in box,
-                                                                    in sphereInBoxSpace,
-                                                                    maxDistance,
-                                                                    out ColliderDistanceResultInternal localResult);
+            var            sphereInBoxSpaceTransform = math.InverseTransformFast(in boxTransform, in sphereTransform);
+            float3         sphereCenterInBoxSpace    = math.transform(sphereInBoxSpaceTransform, sphere.center);
+            SphereCollider sphereInBoxSpace          = new SphereCollider(sphereCenterInBoxSpace, sphere.radius);
+            bool           hit                       = BoxSphereDistance(in box,
+                                                               in sphereInBoxSpace,
+                                                               maxDistance,
+                                                               out ColliderDistanceResultInternal localResult);
             result = new ColliderDistanceResult
             {
                 hitpointA         = math.transform(boxTransform, localResult.hitpointA),
@@ -62,23 +62,24 @@ namespace Latios.Psyshock
                                         in RigidTransform targetBoxTransform,
                                         out ColliderCastResult result)
         {
-            // Move everything relative to the target box before transforming to box space.
-            var  sphereCenter     = castStart.pos - targetBoxTransform.pos + math.rotate(castStart.rot, sphereToCast.center);
-            var  castDisplacement = castEnd - castStart.pos;
-            var  rayStart         = math.InverseRotateFast(targetBoxTransform.rot, sphereCenter);
-            var  ray              = new Ray(rayStart, rayStart + math.InverseRotateFast(targetBoxTransform.rot, castDisplacement));
-            bool hit              = PointRayBox.RaycastRoundedBox(in ray, in targetBox, sphereToCast.radius, out var fraction, out var roundedNormal, out var featureNormal);
+            var  targetBoxTransformInverse = math.inverse(targetBoxTransform);
+            var  casterInTargetSpace       = math.mul(targetBoxTransformInverse, castStart);
+            var  start                     = math.transform(casterInTargetSpace, sphereToCast.center);
+            var  ray                       = new Ray(start, start + math.rotate(targetBoxTransformInverse, castEnd - castStart.pos));
+            bool hit                       = PointRayBox.RaycastRoundedBox(in ray, in targetBox, sphereToCast.radius, out var fraction, out var normal);
             if (hit)
             {
-                roundedNormal = math.rotate(targetBoxTransform.rot, roundedNormal);
-                result        = new ColliderCastResult
+                var hitTransform = castStart;
+                hitTransform.pos = math.lerp(castStart.pos, castEnd, fraction);
+                DistanceBetween(in targetBox, in targetBoxTransform, in sphereToCast, in hitTransform, 1f, out var distanceResult);
+                result = new ColliderCastResult
                 {
-                    hitpoint                 = targetBoxTransform.pos + (sphereCenter - roundedNormal * sphereToCast.radius + castDisplacement * fraction),
-                    normalOnCaster           = -roundedNormal,
-                    normalOnTarget           = math.rotate(targetBoxTransform.rot, featureNormal),
-                    subColliderIndexOnCaster = 0,
-                    subColliderIndexOnTarget = 0,
-                    distance                 = math.length(ray.displacement) * fraction,
+                    hitpoint                 = distanceResult.hitpointB,
+                    normalOnCaster           = distanceResult.normalB,
+                    normalOnTarget           = distanceResult.normalA,
+                    subColliderIndexOnCaster = distanceResult.subColliderIndexB,
+                    subColliderIndexOnTarget = distanceResult.subColliderIndexA,
+                    distance                 = math.distance(hitTransform.pos, castStart.pos)
                 };
                 return true;
             }
@@ -93,22 +94,24 @@ namespace Latios.Psyshock
                                         in RigidTransform targetSphereTransform,
                                         out ColliderCastResult result)
         {
-            // Move everything relative to the cast start before transforming to caster space and reversing the cast direction
-            var  sphereCenter = targetSphereTransform.pos - castStart.pos + math.rotate(targetSphereTransform.rot, targetSphere.center);
-            var  rayStart     = math.InverseRotateFast(castStart.rot, sphereCenter);
-            var  ray          = new Ray(rayStart, rayStart + math.InverseRotateFast(castStart.rot, castStart.pos - castEnd));
-            bool hit          = PointRayBox.RaycastRoundedBox(in ray, in boxToCast, targetSphere.radius, out var fraction, out var roundedNormal, out var featureNormal);
+            var  castReverse        = castStart.pos - castEnd;
+            var  worldToCasterSpace = math.inverse(castStart);
+            var  start              = math.transform(targetSphereTransform, targetSphere.center);
+            var  ray                = new Ray(math.transform(worldToCasterSpace, start), math.transform(worldToCasterSpace, start + castReverse));
+            bool hit                = PointRayBox.RaycastRoundedBox(in ray, in boxToCast, targetSphere.radius, out var fraction, out _);
             if (hit)
             {
-                roundedNormal = math.rotate(castStart.rot, roundedNormal);
-                result        = new ColliderCastResult
+                var hitTransform = castStart;
+                hitTransform.pos = math.lerp(castStart.pos, castEnd, fraction);
+                DistanceBetween(in boxToCast, in hitTransform, in targetSphere, in targetSphereTransform, 1f, out var distanceResult);
+                result = new ColliderCastResult
                 {
-                    hitpoint                 = castStart.pos + (sphereCenter - roundedNormal * targetSphere.radius),
-                    normalOnCaster           = math.rotate(castStart.rot, featureNormal),
-                    normalOnTarget           = -roundedNormal,
-                    subColliderIndexOnCaster = 0,
-                    subColliderIndexOnTarget = 0,
-                    distance                 = math.length(ray.displacement) * fraction
+                    hitpoint                 = distanceResult.hitpointA,
+                    normalOnCaster           = distanceResult.normalA,
+                    normalOnTarget           = distanceResult.normalB,
+                    subColliderIndexOnCaster = distanceResult.subColliderIndexA,
+                    subColliderIndexOnTarget = distanceResult.subColliderIndexB,
+                    distance                 = math.distance(hitTransform.pos, castStart.pos)
                 };
                 return true;
             }
@@ -145,19 +148,19 @@ namespace Latios.Psyshock
                 };
                 return 1;
             }
-            if (dot <= math.EPSILON)
+            if (dot <= 0f)
                 return 0;
             var   castDistance = math.abs(distanceResult.distance) + math.length(box.halfSize) + sphere.radius;
             var   castStart    = sphereTransform;
             float castOffset   = 0f;
             if (distanceResult.distance <= 0f)
             {
-                castOffset     = (-distanceResult.distance / dot) * (1f + math.EPSILON) + math.EPSILON;
+                castOffset     = (-distanceResult.distance * (1f + math.EPSILON) + math.EPSILON);
                 castStart.pos += contactNormal * castOffset;
             }
             if (ColliderCast(in sphere, in castStart, castStart.pos - castDistance * contactNormal, in box, in boxTransform, out var castResult))
             {
-                castResult.distance -= castOffset;
+                castResult.distance += castOffset;
                 contacts[0]          = new LatiosSim.Contact
                 {
                     contactOnA  = castResult.hitpoint,
@@ -172,7 +175,6 @@ namespace Latios.Psyshock
         {
             bool   hit     = PointRayBox.PointBoxDistance(sphere.center, in box, maxDistance + sphere.radius, out PointDistanceResultInternal pointDistanceResult);
             float3 normalB = math.normalizesafe(pointDistanceResult.hitpoint - sphere.center, -pointDistanceResult.normal);
-            normalB        = math.chgsign(normalB, pointDistanceResult.distance);
             result         = new ColliderDistanceResultInternal
             {
                 distance     = pointDistanceResult.distance - sphere.radius,
@@ -183,7 +185,7 @@ namespace Latios.Psyshock
                 featureCodeA = pointDistanceResult.featureCode,
                 featureCodeB = 0
             };
-            return result.distance <= maxDistance;  // Rechecked for rounding
+            return hit;
         }
     }
 }

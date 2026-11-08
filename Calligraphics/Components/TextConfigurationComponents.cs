@@ -114,12 +114,12 @@ namespace Latios.Calligraphics
         }
 
         /// <summary>
-        /// Enable word wrapping. Word wrapping is controlled by the maxLineWidth value, and this property can overwrite that value.
+        /// Enable word wrapping
         /// </summary>
         public bool wordWrap
         {
-            get => maxLineWidth >= float.MaxValue || maxLineWidth <= 0f;
-            set => maxLineWidth = float.MaxValue;
+            get => Bits.GetBit(packed, 31);
+            set => Bits.SetBit(ref packed, 31, value);
         }
 
         /// <summary>

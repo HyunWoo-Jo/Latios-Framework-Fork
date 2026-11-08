@@ -227,7 +227,7 @@ namespace Latios.Transforms
         }
 
         /// <summary>
-        /// Multiplies B by the inverse of A, effectively computing the local transform of B relative to A. This variant normalizes the rotation.
+        /// Multiplies B by the inverse of A, effectively computing the local transform of B relative to A. This variant normalizes the rotation
         /// </summary>
         /// <param name="a">The transform to inverse</param>
         /// <param name="b">The transform to not inverse</param>
@@ -239,7 +239,7 @@ namespace Latios.Transforms
             return new TransformQvs
             {
                 position = math.rotate(inverseRotation, b.position - a.position) * rcps.xyz * rcps.w,
-                rotation = math.normalize(math.mul(inverseRotation, b.rotation)),
+                rotation = math.mul(inverseRotation, b.rotation),
                 scale    = rcps.w * b.scale
             };
         }
@@ -460,12 +460,12 @@ namespace Latios.Transforms
         public static float3 TransformDirectionWithStretch(in TransformQvvs qvvs, float3 direction)
         {
             var magnitude = math.length(direction);
-            return math.normalizesafe(math.rotate(qvvs.rotation, direction * qvvs.stretch)) * magnitude;
+            return math.normalizesafe(math.rotate(qvvs.rotation, direction) * qvvs.stretch) * magnitude;
         }
 
         public static float3 TransformDirectionScaledAndStretched(in TransformQvvs qvvs, float3 direction)
         {
-            return math.rotate(qvvs.rotation, direction * qvvs.stretch * qvvs.scale);
+            return math.rotate(qvvs.rotation, direction) * qvvs.stretch * qvvs.scale;
         }
 
         public static float3 InverseTransformDirection(in TransformQvvs qvvs, float3 direction)
@@ -543,24 +543,6 @@ namespace Latios.Transforms
             var result       = TransformQvvs.identity;
             result.context32 = context32;
             return result;
-        }
-
-        /// <summary>
-        /// Transforms a surface normal from local space to world space, so that it stays perpendicular to the surface under
-        /// non-uniform scale or stretch. The result is not normalized.
-        /// </summary>
-        public static float3 TransformNormalUnnormalized(in TransformQvvs qvvs, float3 localNormal)
-        {
-            return math.rotate(qvvs.rotation, localNormal * math.rcp(qvvs.stretch * qvvs.scale));
-        }
-
-        /// <summary>
-        /// Transforms a surface normal from world space to local space, so that it stays perpendicular to the surface under
-        /// non-uniform scale or stretch. The result is not normalized.
-        /// </summary>
-        public static float3 InverseTransformNormalUnnormalized(in TransformQvvs qvvs, float3 worldNormal)
-        {
-            return InverseTransformDirection(in qvvs, worldNormal) * qvvs.stretch * qvvs.scale;
         }
     }
 }

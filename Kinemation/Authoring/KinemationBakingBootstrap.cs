@@ -38,7 +38,6 @@ namespace Latios.Kinemation.Authoring
             context.bakingSystemTypesToDisable.Add(TypeManager.GetSystemTypeIndex<Unity.Rendering.MeshRendererBaking>());
             context.bakingSystemTypesToDisable.Add(TypeManager.GetSystemTypeIndex<Unity.Rendering.RenderMeshPostProcessSystem>());
             context.bakingSystemTypesToInject.Add(TypeManager.GetSystemTypeIndex<RendererBakingSystem>());
-            context.bakingSystemTypesToInject.Add(TypeManager.GetSystemTypeIndex<LodGroupBakingSystem>());
 
             context.optimizationSystemTypesToInject.Add(TypeManager.GetSystemTypeIndex<LatiosFrozenStaticRendererSystem>());
             context.optimizationSystemTypesToDisable.Add(TypeManager.GetSystemTypeIndex<Unity.Rendering.FrozenStaticRendererSystem>());

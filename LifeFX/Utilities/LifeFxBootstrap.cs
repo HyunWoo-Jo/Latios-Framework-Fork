@@ -18,14 +18,10 @@ namespace Latios.LifeFX
         /// <param name="world">The world in which LifeFX should be installed</param>
         public static void InstallLifeFX(LatiosWorld world)
         {
-            // Everything but the tracked transform update uploads to a GraphicsBuffer.
-            if (!world.worldBlackboardEntity.HasComponent<Kinemation.NoGraphicsTag>())
-            {
-                BootstrapTools.InjectSystem(TypeManager.GetSystemTypeIndex<GraphicsEventUploadSystem>(),           world);
-                BootstrapTools.InjectSystem(TypeManager.GetSystemTypeIndex<GraphicsGlobalBufferBroadcastSystem>(), world);
-                BootstrapTools.InjectSystem(TypeManager.GetSystemTypeIndex<DispatchTrackedWorldTransformSystem>(), world);
-            }
-            BootstrapTools.InjectSystem(TypeManager.GetSystemTypeIndex<UpdateTrackedWorldTransformSystem>(), world);
+            BootstrapTools.InjectSystem(TypeManager.GetSystemTypeIndex<GraphicsEventUploadSystem>(),           world);
+            BootstrapTools.InjectSystem(TypeManager.GetSystemTypeIndex<GraphicsGlobalBufferBroadcastSystem>(), world);
+            BootstrapTools.InjectSystem(TypeManager.GetSystemTypeIndex<UpdateTrackedWorldTransformSystem>(),   world);
+            BootstrapTools.InjectSystem(TypeManager.GetSystemTypeIndex<DispatchTrackedWorldTransformSystem>(), world);
         }
     }
 }

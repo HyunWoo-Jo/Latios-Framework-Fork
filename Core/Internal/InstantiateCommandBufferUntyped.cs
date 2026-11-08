@@ -72,7 +72,7 @@ namespace Latios
             CheckAllocator(allocator);
 
             m_Safety = CollectionHelper.CreateSafetyHandle(allocator);
-            CollectionHelper.SetStaticSafetyId<InstantiateCommandBufferUntyped>(ref m_Safety, ref s_staticSafetyId.Data);
+            CollectionHelper.SetStaticSafetyId<EntityOperationCommandBuffer>(ref m_Safety, ref s_staticSafetyId.Data);
             AtomicSafetyHandle.SetBumpSecondaryVersionOnScheduleWrite(m_Safety, true);
 #endif
 
@@ -382,11 +382,6 @@ namespace Latios
         [BurstCompile]
         static class Playbacker
         {
-            struct AliasResolver : IComponentData
-            {
-                byte b;
-            }
-
             [BurstCompile]
             public static void Playback(InstantiateCommandBufferUntyped* icb, EntityManager* em)
             {
@@ -453,14 +448,6 @@ namespace Latios
 
                     if (uniquePrefab.count - 1 > 0)
                     {
-                        var esi = em.GetStorageInfo(firstEntity);
-                        if (esi.IndexInChunk + 1 != esi.Chunk.Count)
-                        {
-                            // The root happens to have an identical archetype to a child for some weird reason.
-                            // We want to move the root to the end of the chunk so that it is consecutive with the following batch.
-                            em.AddComponent<AliasResolver>(firstEntity);
-                            em.RemoveComponent<AliasResolver>(firstEntity);
-                        }
                         var subArray = instantiatedEntities.GetSubArray(startIndex, uniquePrefab.count - 1);
                         em.Instantiate(firstEntity, subArray);
                         startIndex += subArray.Length;

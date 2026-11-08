@@ -283,7 +283,6 @@ namespace Latios.Transforms
                         {
                             m_worldTransform = transform,
                             m_handle         = default,
-                            m_esil           = esil,
                             m_access         = cache.chunkEntities + indexInChunk
                         };
                     case Role.Root:
@@ -640,26 +639,22 @@ namespace Latios.Transforms
                 {
                     int currentHierarchyIndex = 0;
                     int currentSoloIndex      = chunks.Length - 1;
-                    while (currentHierarchyIndex <= currentSoloIndex)
+                    for (; currentHierarchyIndex < currentSoloIndex; currentHierarchyIndex++)
                     {
-                        // Walk up until we hit a solo chunk or exhaust the array
-                        if (chunks[currentHierarchyIndex].role != Role.Solo)
+                        if (chunks[currentHierarchyIndex].role == Role.Solo)
                         {
-                            currentHierarchyIndex++;
-                            continue;
+                            bool swapped = false;
+                            for (; currentSoloIndex > currentHierarchyIndex && !swapped; currentSoloIndex--)
+                            {
+                                if (chunks[currentSoloIndex].role != Role.Solo)
+                                {
+                                    (chunks[currentHierarchyIndex], chunks[currentSoloIndex]) = (chunks[currentSoloIndex], chunks[currentHierarchyIndex]);
+                                    swapped                                                   = true;
+                                }
+                            }
                         }
-                        // Walk down until we hit a hierarchy chunk or reach the hierarchy counter
-                        while (currentSoloIndex > currentHierarchyIndex && chunks[currentSoloIndex].role == Role.Solo)
-                            currentSoloIndex--;
-                        // If we reach the hierarchy counter, that is pointing to the first solo chunk, and we can stop
-                        if (currentSoloIndex == currentHierarchyIndex)
-                            break;
-                        // Otherwise, swap the chunks, advance each indexer, and continue
-                        (chunks[currentHierarchyIndex], chunks[currentSoloIndex]) = (chunks[currentSoloIndex], chunks[currentHierarchyIndex]);
-                        currentHierarchyIndex++;
-                        currentSoloIndex--;
                     }
-                    hierarchyChunkCount = currentHierarchyIndex;
+                    hierarchyChunkCount = currentSoloIndex;
                 }
 
                 var hierarchyChunks = chunks.AsArray().GetSubArray(0, hierarchyChunkCount);

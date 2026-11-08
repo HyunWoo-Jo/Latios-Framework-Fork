@@ -87,7 +87,8 @@ namespace Latios.Kinemation
         public float CountLoopCycleTransitions(float currentTime, float previousTime)
         {
             float2 packedTimes = new float2(currentTime, previousTime);
-            var    cycles      = math.floor(packedTimes / duration);
+            math.modf(packedTimes / duration, out var cycles);
+            cycles -= math.select(0f, 1f, packedTimes < 0f);
             return cycles.x - cycles.y;
         }
 
@@ -102,8 +103,7 @@ namespace Latios.Kinemation
         /// <returns>A bone transform sampled from the clip in local space of the bone, with its weight set to 1f</returns>
         public unsafe TransformQvvs SampleBone(int boneIndex, float time, KeyframeInterpolationMode keyframeInterpolationMode = KeyframeInterpolationMode.Interpolate)
         {
-            var mode  = (AclUnity.Decompression.KeyframeInterpolationMode)keyframeInterpolationMode;
-            boneIndex = math.clamp(boneIndex, 0, boneCount - 1);
+            var mode = (AclUnity.Decompression.KeyframeInterpolationMode)keyframeInterpolationMode;
 
             // Note: ACL clamps time, so we don't need to worry about it.
             // ACLUnity also clamps the boneIndex, so we don't need to worry about that either.
@@ -142,7 +142,6 @@ namespace Latios.Kinemation
                 AclUnity.Decompression.SamplePoseBlendedFirst(compressedClipDataAligned16.GetUnsafePtr(), buffer, blendWeight, time, mode);
         }
 
-#if !LATIOS_TRANSFORMS_UNITY
         /// <summary>
         /// Samples the animation clip for the entire skeleton at the given time weighted by the blendWeight.
         /// This method uses a special fast-path.
@@ -166,7 +165,6 @@ namespace Latios.Kinemation
             else
                 AclUnity.Decompression.SamplePoseBlendedFirst(compressedClipDataAligned16.GetUnsafePtr(), buffer, blendWeight, time, mode);
         }
-#endif
 
         /// <summary>
         /// Samples the animation clip for parts of the skeleton specified by the mask at the given time weighted by the blendWeight.
@@ -194,7 +192,6 @@ namespace Latios.Kinemation
                 AclUnity.Decompression.SamplePoseMaskedBlendedFirst(compressedClipDataAligned16.GetUnsafePtr(), buffer, mask, blendWeight, time, mode);
         }
 
-#if !LATIOS_TRANSFORMS_UNITY
         /// <summary>
         /// Samples the animation clip for parts of the skeleton specified by the mask at the given time weighted by the blendWeight.
         /// This method uses a special fast-path.
@@ -220,7 +217,6 @@ namespace Latios.Kinemation
             else
                 AclUnity.Decompression.SamplePoseMaskedBlendedFirst(compressedClipDataAligned16.GetUnsafePtr(), buffer, mask, blendWeight, time, mode);
         }
-#endif
 
         /// <summary>
         /// Samples the animation clip for the entire set of transforms at the given time weighted by the blendWeight.
@@ -354,7 +350,7 @@ namespace Latios.Kinemation
         /// <summary>
         /// The size the clip would be if uncompressed, ignoring padding bytes
         /// </summary>
-        public int sizeUncompressed => ((int)math.round(sampleRate * duration) + 1) * boneCount * 40;
+        public int sizeUncompressed => ((int)math.round(sampleRate * duration) + 1) * 40;
         /// <summary>
         /// The size of the clip in its compressed form.
         /// </summary>
@@ -374,14 +370,12 @@ namespace Latios.Kinemation
                 throw new ArgumentException("The Optimized Skeleton does not contain enough bones for the animation clip.");
         }
 
-#if !LATIOS_TRANSFORMS_UNITY
         [Conditional("ENABLE_UNITY_COLLECTIONS_CHECKS"), Conditional("UNITY_DOTS_DEBUG")]
         void CheckSkeletonIsBigEnoughForClip(in TickedOptimizedSkeletonAspect osa, short boneCount)
         {
             if (osa.boneCount < boneCount)
                 throw new ArgumentException("The Optimized Skeleton does not contain enough bones for the animation clip.");
         }
-#endif
     }
 
     /// <summary>
@@ -456,7 +450,8 @@ namespace Latios.Kinemation
         public float CountLoopCycleTransitions(float currentTime, float previousTime)
         {
             float2 packedTimes = new float2(currentTime, previousTime);
-            var    cycles      = math.floor(packedTimes / duration);
+            math.modf(packedTimes / duration, out var cycles);
+            cycles -= math.select(0f, 1f, packedTimes < 0f);
             return cycles.x - cycles.y;
         }
 
@@ -471,8 +466,7 @@ namespace Latios.Kinemation
         /// <returns>A parameter sampled from the clip in local space of the bone</returns>
         public unsafe float SampleParameter(int parameterIndex, float time, KeyframeInterpolationMode keyframeInterpolationMode = KeyframeInterpolationMode.Interpolate)
         {
-            var mode       = (AclUnity.Decompression.KeyframeInterpolationMode)keyframeInterpolationMode;
-            parameterIndex = math.clamp(parameterIndex, 0, parameterCount - 1);
+            var mode = (AclUnity.Decompression.KeyframeInterpolationMode)keyframeInterpolationMode;
 
             // Note: ACL clamps time, so we don't need to worry about it.
             // ACLUnity also clamps the parameterIndex, so we don't need to worry about that either.
@@ -546,41 +540,68 @@ namespace Latios.Kinemation
         /// <returns>True if events were found, false otherwise</returns>
         public bool TryGetEventsRange(float previousTime, float currentTime, out int firstEventIndex, out int eventCount)
         {
-            firstEventIndex = -1;
-            eventCount      = 0;
             if (previousTime == currentTime || times.Length == 0)
+            {
+                firstEventIndex = -1;
+                eventCount      = 0;
                 return false;
+            }
 
-            // Todo: Maybe a binary search here is better?
-            int first = times.Length;
+            // Todo: Vectorize and optimize
+            firstEventIndex = -1;
             for (int i = 0; i < times.Length; i++)
             {
                 if (times[i] > previousTime)
                 {
-                    first = i;
+                    firstEventIndex = i;
                     break;
                 }
             }
-            int onePastLast = times.Length;
+            int onePastLastEventIndex = -1;
             for (int i = 0; i < times.Length; i++)
             {
                 if (times[i] > currentTime)
                 {
-                    onePastLast = i;
+                    onePastLastEventIndex = i;
                     break;
                 }
             }
 
             if (previousTime < currentTime)
-                eventCount = onePastLast - first;
-            else
-                eventCount = times.Length - first + onePastLast;
-            if (eventCount <= 0)
             {
+                if (firstEventIndex == -1)
+                {
+                    eventCount = 0;
+                    return false;
+                }
+
+                if (onePastLastEventIndex == -1)
+                {
+                    // The time is beyond the last event.
+                    eventCount = times.Length - firstEventIndex;
+                    return true;
+                }
+
+                eventCount = onePastLastEventIndex - firstEventIndex;
+                return true;
+            }
+
+            // We wrapped around
+            if (onePastLastEventIndex <= 0 && firstEventIndex == -1)
+            {
+                // We start past the last event and the current time is before the first event
                 eventCount = 0;
                 return false;
             }
-            firstEventIndex = first % times.Length;
+
+            if (firstEventIndex == -1)
+            {
+                firstEventIndex = 0;
+                eventCount      = onePastLastEventIndex;
+                return true;
+            }
+
+            eventCount = times.Length - firstEventIndex + onePastLastEventIndex;
             return true;
         }
 
@@ -624,7 +645,7 @@ namespace Latios.Kinemation
                 count     += (int)loopCycleTransitions * times.Length;
                 return new Enumerator
                 {
-                    currentIndex = start - 1,
+                    currentIndex = start,
                     countLeft    = count,
                     modulus      = times.Length,
                     stride       = 1
@@ -653,7 +674,7 @@ namespace Latios.Kinemation
                 count     += (int)math.abs(loopCycleTransitions) * times.Length;
                 return new Enumerator
                 {
-                    currentIndex = end + count + 1,  // start + (count - (start - end)) + 1
+                    currentIndex = end + count,  // start + (count - (start - end))
                     countLeft    = count,
                     modulus      = times.Length,
                     stride       = -1

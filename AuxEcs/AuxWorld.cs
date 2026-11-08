@@ -84,7 +84,6 @@ namespace Latios.AuxEcs
         public void RemoveAllComponents(Entity entity)
         {
             CheckIsValid();
-            impl->RemoveAllComponents(entity);
         }
 
         /// <summary>

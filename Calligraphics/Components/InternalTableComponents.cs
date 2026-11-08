@@ -338,17 +338,6 @@ namespace Latios.Calligraphics
         {
             return (GlyphEntryIDFlags)(glyphEntryID >> 30);
         }
-        public static RenderFormat GetFormatGlyphFromEntryID(uint glyphEntryID)
-        {
-            return DecodeGlyphEntryIDFlags(glyphEntryID) switch
-                   {
-                       GlyphEntryIDFlags.SDF8NormalSize => RenderFormat.SDF8,
-                       GlyphEntryIDFlags.SDF16BigSize => RenderFormat.SDF16,
-                       GlyphEntryIDFlags.SDF16MassiveSize => RenderFormat.SDF16,
-                       GlyphEntryIDFlags.Bitmap8888 => RenderFormat.Bitmap8888,
-                       _ => RenderFormat.SDF8,
-                   };
-        }
 
         public JobHandle TryDispose(JobHandle inputDeps)
         {
@@ -413,7 +402,7 @@ namespace Latios.Calligraphics
 
         public bool TryAllocateNoNewSlice(uint glyphEntryId, short width, short height, out short x, out short y, out short z)
         {
-            var format  = GlyphTable.GetFormatGlyphFromEntryID(glyphEntryId);
+            var format  = (RenderFormat)Bits.GetBits(glyphEntryId, 30, 2);
             var shelves = sdf8Shelves;
             if (format == RenderFormat.SDF16)
                 shelves = sdf16Shelves;
@@ -582,7 +571,7 @@ namespace Latios.Calligraphics
 
         public void Allocate(uint glyphEntryId, short width, short height, out short x, out short y, out short z)
         {
-            var format  = GlyphTable.GetFormatGlyphFromEntryID(glyphEntryId);
+            var format  = (RenderFormat)Bits.GetBits(glyphEntryId, 30, 2);
             var shelves = sdf8Shelves;
             if (format == RenderFormat.SDF16)
                 shelves = sdf16Shelves;
@@ -765,7 +754,7 @@ namespace Latios.Calligraphics
         }
         public void Free(uint glyphEntryId, short width, short height, short x, short y, short z)
         {
-            var format  = GlyphTable.GetFormatGlyphFromEntryID(glyphEntryId);
+            var format  = (RenderFormat)Bits.GetBits(glyphEntryId, 30, 2);
             var shelves = sdf8Shelves;
             if (format == RenderFormat.SDF16)
                 shelves = sdf16Shelves;

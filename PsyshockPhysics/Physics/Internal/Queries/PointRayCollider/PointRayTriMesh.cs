@@ -18,21 +18,21 @@ namespace Latios.Psyshock
 
         public static bool DistanceBetween(float3 point, in TriMeshCollider triMesh, in RigidTransform triMeshTransform, float maxDistance, out PointDistanceResult result)
         {
-            var pointInTriMesh = math.InverseTransformFast(in triMeshTransform, point);
+            var transform      = new TransformQvvs(triMeshTransform.pos, triMeshTransform.rot, 1f, triMesh.scale);
+            var pointInTriMesh = qvvs.InverseTransformPoint(in transform, point);
             var aabb           = Physics.AabbFrom(pointInTriMesh - maxDistance, pointInTriMesh + maxDistance);
             var processor      = new PointProcessor
             {
                 blob        = triMesh.triMeshColliderBlob,
                 point       = pointInTriMesh,
-                scale       = triMesh.scale,
                 maxDistance = maxDistance,
                 found       = false
             };
             triMesh.triMeshColliderBlob.Value.FindTriangles(in aabb, ref processor, triMesh.scale);
             if (processor.found)
             {
-                var triangle            = Physics.ScaleStretchCollider(triMesh.triMeshColliderBlob.Value.triangles[processor.bestIndex], 1f, triMesh.scale);
-                var hit                 = PointRayTriangle.DistanceBetween(point, in triangle, in triMeshTransform, maxDistance, out result);
+                var hit =
+                    PointRayTriangle.DistanceBetween(point, in triMesh.triMeshColliderBlob.Value.triangles[processor.bestIndex], in triMeshTransform, maxDistance, out result);
                 result.subColliderIndex = processor.bestIndex;
                 return hit;
             }
@@ -51,11 +51,10 @@ namespace Latios.Psyshock
                 ray   = rayInTriMeshSpace,
                 found = false
             };
-            triMesh.triMeshColliderBlob.Value.FindTriangles(in aabb, ref processor);
+            triMesh.triMeshColliderBlob.Value.FindTriangles(in aabb, ref processor, triMesh.scale);
             if (processor.found)
             {
-                var triangle            = Physics.ScaleStretchCollider(triMesh.triMeshColliderBlob.Value.triangles[processor.bestIndex], 1f, triMesh.scale);
-                var hit                 = PointRayTriangle.Raycast(in ray, in triangle, in triMeshTransform, out result);
+                var hit                 = PointRayTriangle.Raycast(in ray, in triMesh.triMeshColliderBlob.Value.triangles[processor.bestIndex], in triMeshTransform, out result);
                 result.subColliderIndex = processor.bestIndex;
                 return hit;
             }
@@ -67,7 +66,6 @@ namespace Latios.Psyshock
         {
             public BlobAssetReference<TriMeshColliderBlob> blob;
             public float3                                  point;
-            public float3                                  scale;
             public float                                   maxDistance;
             public float                                   bestDistance;
             public int                                     bestIndex;
@@ -75,8 +73,7 @@ namespace Latios.Psyshock
 
             public bool Execute(int index)
             {
-                var triangle = Physics.ScaleStretchCollider(blob.Value.triangles[index], 1f, scale);
-                if (PointRayTriangle.PointTriangleDistance(point, in triangle, maxDistance, out var hit))
+                if (PointRayTriangle.PointTriangleDistance(point, in blob.Value.triangles[index], maxDistance, out var hit))
                 {
                     if (!found || hit.distance < bestDistance)
                     {

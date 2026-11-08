@@ -66,8 +66,7 @@ namespace Latios.Kinemation.Authoring.Systems
 
             m_lightmapBakingContext.ProcessLightMapsForConversion(uniqueIndicesSorted.AsArray(), lightmaps);
 
-            var lightmapsSCD        = new LightMaps();
-            var lightmapMaterialMap = new NativeHashMap<UnityObjectRef<Material>, UnityObjectRef<Material> >(128, WorldUpdateAllocator);
+            var lightmapsSCD = new LightMaps();
 
             foreach ((var lightmapIndex, var lightmapProperty, var buffer) in Query<RefRO<BakingLightmapIndex>,
                                                                                     RefRW<BuiltinMaterialPropertyUnity_LightmapIndex>,
@@ -82,9 +81,9 @@ namespace Latios.Kinemation.Authoring.Systems
                     for (int i = 0; i < buffer.Length; i++)
                     {
                         ref var element  = ref buffer.ElementAt(i);
-                        var     oldMat   = element.material;
-                        element.material = m_lightmapBakingContext.GetLightMappedMaterial(oldMat, lightmapRef);
-                        lightmapMaterialMap.TryAdd(oldMat, element.material);
+                        var     mat      = element.material.Value;
+                        var     newMat   = m_lightmapBakingContext.GetLightMappedMaterial(mat, lightmapRef);
+                        element.material = newMat;
                     }
                     lightmapsSCD = lightmapRef.lightMaps;
                 }
@@ -92,9 +91,9 @@ namespace Latios.Kinemation.Authoring.Systems
 
             state.EntityManager.SetSharedComponentManaged(QueryBuilder().WithAll<LightMaps>().Build(), lightmapsSCD);
 
-            var renderablesWithLightmapsQuery = QueryBuilder().WithAll<LightMaps>().WithPresent<MaterialMeshInfo>().WithAllRW<BakingMaterialMeshSubmesh>()
+            var renderablesWithLightmapsQuery = QueryBuilder().WithAll<LightMaps, MaterialMeshInfo>().WithAllRW<BakingMaterialMeshSubmesh>()
                                                 .WithOptions(EntityQueryOptions.IncludePrefab | EntityQueryOptions.IncludeDisabledEntities).Build();
-            var mipmapRenderablesWithLightmapsQuery = QueryBuilder().WithAll<LightMaps, BakingMaterialMeshSubmesh>().WithPresent<MaterialMeshInfo>()
+            var mipmapRenderablesWithLightmapsQuery = QueryBuilder().WithAll<LightMaps, MaterialMeshInfo, BakingMaterialMeshSubmesh>()
                                                       .WithAll<BakingStreamingTexture, BakingStreamingTextureMeshUv0Metric, StreamingMipMapArray>()
                                                       .WithOptions(EntityQueryOptions.IncludePrefab | EntityQueryOptions.IncludeDisabledEntities).Build();
             var meshMap               = new NativeHashMap<UnityObjectRef<Mesh>, int>(128, WorldUpdateAllocator);
@@ -106,7 +105,6 @@ namespace Latios.Kinemation.Authoring.Systems
             var streamingTexturesList = new NativeList<StreamingMipMapArray.StreamingTextureInMaterial>(WorldUpdateAllocator);
             if (!renderablesWithLightmapsQuery.IsEmptyIgnoreFilter)
             {
-                new RemapLightmapStreamingMaterialsJob { map = lightmapMaterialMap }.Run();
                 new CollectUniqueMeshesAndMaterialsJob
                 {
                     meshMap      = meshMap,
@@ -169,9 +167,9 @@ namespace Latios.Kinemation.Authoring.Systems
                 duplicatesMap.Clear();
                 streamingTexturesList.Clear();
             }
-            var renderablesWithoutLightmapsQuery = QueryBuilder().WithPresent<MaterialMeshInfo>().WithAllRW<BakingMaterialMeshSubmesh>().WithAbsent<LightMaps>()
+            var renderablesWithoutLightmapsQuery = QueryBuilder().WithAll<MaterialMeshInfo>().WithAllRW<BakingMaterialMeshSubmesh>().WithAbsent<LightMaps>()
                                                    .WithOptions(EntityQueryOptions.IncludePrefab | EntityQueryOptions.IncludeDisabledEntities).Build();
-            var mipmapRenderablesWithoutLightmapsQuery = QueryBuilder().WithPresent<MaterialMeshInfo>().WithAll<BakingMaterialMeshSubmesh, BakingStreamingTexture>()
+            var mipmapRenderablesWithoutLightmapsQuery = QueryBuilder().WithAll<MaterialMeshInfo, BakingMaterialMeshSubmesh, BakingStreamingTexture>()
                                                          .WithAll<BakingStreamingTextureMeshUv0Metric, StreamingMipMapArray>().WithAbsent<LightMaps>()
                                                          .WithOptions(EntityQueryOptions.IncludePrefab | EntityQueryOptions.IncludeDisabledEntities).Build();
             if (!renderablesWithoutLightmapsQuery.IsEmptyIgnoreFilter)
@@ -270,26 +268,6 @@ namespace Latios.Kinemation.Authoring.Systems
                 foreach (var index in src)
                     dst.Add(index);
                 dst.Sort();
-            }
-        }
-
-        [BurstCompile]
-        partial struct RemapLightmapStreamingMaterialsJob : IJobEntity
-        {
-            [ReadOnly] public NativeHashMap<UnityObjectRef<Material>, UnityObjectRef<Material> > map;
-
-            public void Execute(ref DynamicBuffer<BakingStreamingTexture> buffer)
-            {
-                var arr = buffer.AsNativeArray();
-                for (int i = 0; i < arr.Length; i++)
-                {
-                    var element = arr[i];
-                    if (map.TryGetValue(element.material, out var replaced))
-                    {
-                        element.material = replaced;
-                        arr[i]           = element;
-                    }
-                }
             }
         }
 

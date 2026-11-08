@@ -26,7 +26,7 @@ namespace Latios.Kinemation.Systems
         [BurstCompile]
         public void OnUpdate(ref SystemState state)
         {
-            var api          = this.GetApi(ref state);
+            var api           = this.GetApi(ref state);
             state.Dependency = new Job
             {
                 lastSystemVersion = state.LastSystemVersion
@@ -47,7 +47,6 @@ namespace Latios.Kinemation.Systems
             public uint lastSystemVersion;
 
             [NoAlias, NativeDisableContainerSafetyRestriction] NativeArray<float> tempFloatBuffer;
-            bool                                                                  radialBoundsDirty;
 
             HasChecker<SkeletonDependent> skeletonDependentChecker;
 
@@ -80,8 +79,6 @@ namespace Latios.Kinemation.Systems
 
                 var localRadialBounds = tempFloatBuffer.GetSubArray(0, chunk.Count);
 
-                bool previousRadialBoundsDirty = radialBoundsDirty;
-                radialBoundsDirty              = true;
                 if (hasDynamicMesh && hasShaderBounds && hasSkeleton)
                 {
                     var mesh   = chunk.GetNativeArray(ref dynamicMeshMaxVertexDisplacementHandle);
@@ -93,17 +90,11 @@ namespace Latios.Kinemation.Systems
                     localRadialBounds.CopyFrom(chunk.GetNativeArray(ref dynamicMeshMaxVertexDisplacementHandle).Reinterpret<float>());
                 else if (hasShaderBounds && hasSkeleton)
                     localRadialBounds.CopyFrom(chunk.GetNativeArray(ref shaderBoundsHandle).Reinterpret<float>());
-                else if (hasSkeleton || hasBlendShapes || previousRadialBoundsDirty)
-                {
+                else if (hasSkeleton || hasBlendShapes)
                     UnsafeUtility.MemClear(localRadialBounds.GetUnsafePtr(), sizeof(float) * chunk.Count);
-                    radialBoundsDirty = false;
-                }
-                else
-                    radialBoundsDirty = false;
 
                 if (hasBlendShapes)
                 {
-                    radialBoundsDirty   = true;
                     var blobs           = chunk.GetNativeArray(ref blobHandle);
                     var weightsAccessor = chunk.GetBufferAccessor(ref blendShapeWeightsHandle);
                     var shapeStates     = chunk.GetNativeArray(ref blendShapeStateHandle);
@@ -114,13 +105,13 @@ namespace Latios.Kinemation.Systems
                         var     state        = shapeStates[i];
                         var     mask         = (int)(state.state & BlendShapeState.Flags.RotationMask);
                         bool    dirty        = (state.state & BlendShapeState.Flags.IsDirty) == BlendShapeState.Flags.IsDirty;
-                        var     weightsBase  = (dirty ? BlendShapeState.CurrentFromMask[mask] : BlendShapeState.PreviousFromMask[mask]) * shapeOffsets.Length;
+                        var     weightsBase  = dirty ? BlendShapeState.CurrentFromMask[mask] : BlendShapeState.PreviousFromMask[mask];
                         if (weights.Length < weightsBase + shapeOffsets.Length)
                         {
                             // We are unitialized, so just grab all the weights we do have.
                             for (int j = 0; j < math.min(weights.Length, shapeOffsets.Length); j++)
                             {
-                                localRadialBounds[i] += math.abs(weights[j]) * shapeOffsets[j];
+                                localRadialBounds[i] += weights[j] * shapeOffsets[j];
                             }
                         }
                         else
@@ -128,7 +119,7 @@ namespace Latios.Kinemation.Systems
                             weights = weights.GetSubArray(weightsBase, shapeOffsets.Length);
                             for (int j = 0; j < shapeOffsets.Length; j++)
                             {
-                                localRadialBounds[i] += math.abs(weights[j]) * shapeOffsets[j];
+                                localRadialBounds[i] += weights[j] * shapeOffsets[j];
                             }
                         }
                     }

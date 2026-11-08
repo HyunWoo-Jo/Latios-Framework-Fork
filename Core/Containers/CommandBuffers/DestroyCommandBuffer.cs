@@ -161,7 +161,6 @@ namespace Latios
                     PlaybackWithJobs(ref entities, ref em, ref legLookup, ref esil);
                 }
                 entities.Dispose();
-                dcb.m_playedBack.Value = true;
             }
 
             [BurstCompile]
@@ -295,7 +294,7 @@ namespace Latios
                 sBatchEntities.Begin();
                 var rootsWithInfo = new NativeArray<EntityWithInfo>(entities.Length, Allocator.TempJob, NativeArrayOptions.UninitializedMemory);
                 var legPrefixSum  = new NativeArray<int>(entities.Length, Allocator.TempJob, NativeArrayOptions.UninitializedMemory);
-                em.CompleteDependencyBeforeRW<LinkedEntityGroup>();
+
                 var rootsJh = new FindRootsJob
                 {
                     roots         = entities,
@@ -307,9 +306,8 @@ namespace Latios
 
                 var legTotal     = new NativeReference<int>(Allocator.TempJob, NativeArrayOptions.UninitializedMemory);
                 var legsWithInfo = new NativeList<EntityWithInfo>(Allocator.TempJob);
-                rootsJh          = new DeduplicateRootsAndPrefixSumLegsJob
+                rootsJh          = new PrefixSumLegsJob
                 {
-                    rootsWithInfo = rootsWithInfo,
                     legPrefixSums = legPrefixSum,
                     legTotal      = legTotal,
                     legsWithInfo  = legsWithInfo
@@ -567,30 +565,20 @@ namespace Latios
             }
 
             [BurstCompile]
-            struct DeduplicateRootsAndPrefixSumLegsJob : IJob
+            struct PrefixSumLegsJob : IJob
             {
-                public NativeArray<EntityWithInfo> rootsWithInfo;
-                public NativeArray<int>            legPrefixSums;
-                public NativeReference<int>        legTotal;
-                public NativeList<EntityWithInfo>  legsWithInfo;
+                public NativeArray<int>           legPrefixSums;
+                public NativeReference<int>       legTotal;
+                public NativeList<EntityWithInfo> legsWithInfo;
 
                 public void Execute()
                 {
-                    UnsafeHashSet<Entity> rootsSet = new UnsafeHashSet<Entity>(rootsWithInfo.Length, Allocator.Temp);
-                    int                   sum      = 0;
+                    int sum = 0;
                     for (int i = 0; i < legPrefixSums.Length; i++)
                     {
-                        if (rootsSet.Add(rootsWithInfo[i].entity))
-                        {
-                            var legCount      = legPrefixSums[i];
-                            legPrefixSums[i]  = sum;
-                            sum              += legCount;
-                        }
-                        else
-                        {
-                            rootsWithInfo[i] = default;
-                            legPrefixSums[i] = sum;
-                        }
+                        var legCount      = legPrefixSums[i];
+                        legPrefixSums[i]  = sum;
+                        sum              += legCount;
                     }
                     legTotal.Value = sum;
                     legsWithInfo.ResizeUninitialized(sum);
@@ -620,10 +608,7 @@ namespace Latios
                         if (count == 0)
                             return;
                     }
-                    if (roots[index] == Entity.Null)
-                        return;
 
-                    // Todo: We already have the chunk and index, so use that instead.
                     var buffer = legLookup[roots[index]];
                     var start  = legPrefixSums[index];
                     var legs   = buffer.AsNativeArray();
@@ -633,7 +618,7 @@ namespace Latios
                         var entity = legs[i].Value;
                         if (!esil.Exists(entity))
                         {
-                            legsWithInfo[start + i - 1] = default;
+                            legsWithInfo[start + i] = default;
                             continue;
                         }
 

@@ -19,6 +19,7 @@ namespace Latios.Calligraphics
             blobBuilder.AllocateString(ref languageBlobRoot.langugage, ref language);
             var result = blobBuilder.CreateBlobAssetReference<LanguageBlob>(Allocator.Persistent);
             blobBuilder.Dispose();
+            languageBlobRoot = result.Value;
             return result;
         }
 

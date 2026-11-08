@@ -252,14 +252,14 @@ namespace Latios.Kinemation.Systems
 
             //UnityEngine.Debug.Log($"Vertex Skinning Buffer size: {requiredDeformSizes.maxRequiredBoneTransformsForVertexSkinning}");
 
-            m_batchSkinningShader.SetBuffer(m_batchSkinningKernelIndex, _dstTransforms,          shaderTransformsBuffer);
-            m_batchSkinningShader.SetBuffer(m_batchSkinningKernelIndex, _dstVertices,            shaderDeformBuffer);
-            m_batchSkinningShader.SetBuffer(m_batchSkinningKernelIndex, _srcVertices,            graphicsBroker.GetMeshVerticesBuffer());
-            m_batchSkinningShader.SetBuffer(m_batchSkinningKernelIndex, _boneWeights,            graphicsBroker.GetMeshWeightsBufferRO());
-            m_batchSkinningShader.SetBuffer(m_batchSkinningKernelIndex, _bindPoses,              graphicsBroker.GetMeshBindPosesBufferRO());
-            m_batchSkinningShader.SetBuffer(m_batchSkinningKernelIndex, _boneOffsets,            graphicsBroker.GetBoneOffsetsBufferRO());
-            m_batchSkinningShader.SetBuffer(m_batchSkinningKernelIndex, _metaBuffer,             skinningMetaBuffer);
-            m_batchSkinningShader.SetBuffer(m_batchSkinningKernelIndex, _skeletonQvvsTransforms, boneTransformsBuffer);
+            m_batchSkinningShader.SetBuffer(0, _dstTransforms,          shaderTransformsBuffer);
+            m_batchSkinningShader.SetBuffer(0, _dstVertices,            shaderDeformBuffer);
+            m_batchSkinningShader.SetBuffer(0, _srcVertices,            graphicsBroker.GetMeshVerticesBuffer());
+            m_batchSkinningShader.SetBuffer(0, _boneWeights,            graphicsBroker.GetMeshWeightsBufferRO());
+            m_batchSkinningShader.SetBuffer(0, _bindPoses,              graphicsBroker.GetMeshBindPosesBufferRO());
+            m_batchSkinningShader.SetBuffer(0, _boneOffsets,            graphicsBroker.GetBoneOffsetsBufferRO());
+            m_batchSkinningShader.SetBuffer(0, _metaBuffer,             skinningMetaBuffer);
+            m_batchSkinningShader.SetBuffer(0, _skeletonQvvsTransforms, boneTransformsBuffer);
 
             for (int dispatchesRemaining = (int)layouts.batchSkinningHeadersCount, offset = 0; dispatchesRemaining > 0;)
             {
@@ -755,7 +755,7 @@ namespace Latios.Kinemation.Systems
                         }
                     }
                 }
-                else if ((classification & DeformClassification.LegacyDotsDeform) != DeformClassification.None)
+                else if ((classification & DeformClassification.LegacyDotsDefom) != DeformClassification.None)
                 {
                     var indices     = chunk.GetNativeArray(ref legacyDotsDeformHandle);
                     var enumerator  = new ChunkEntityBatchEnumerator(true, new v128(lower, upper), chunk.Count);
@@ -799,7 +799,7 @@ namespace Latios.Kinemation.Systems
                         }
                     }
                 }
-                else if ((classification & DeformClassification.LegacyDotsDeform) != DeformClassification.None)
+                else if ((classification & DeformClassification.LegacyDotsDefom) != DeformClassification.None)
                 {
                     var indices     = chunk.GetNativeArray(ref legacyDotsDeformHandle);
                     var enumerator  = new ChunkEntityBatchEnumerator(true, new v128(lower, upper), chunk.Count);
@@ -1056,7 +1056,7 @@ namespace Latios.Kinemation.Systems
                 if (startOfTwoAgo < 0 && startOfPrevious >= 0)
                     ProcessChain(requests.GetSubArray(startOfPrevious, requests.Length - startOfPrevious), meshes, indexInChunk, skeletonBonesCount);
                 else if (startOfPrevious >= 0 && startOfPrevious != startOfTwoAgo)
-                    ProcessChain(requests.GetSubArray(startOfPrevious, startOfTwoAgo - startOfPrevious), meshes, indexInChunk, skeletonBonesCount);
+                    ProcessChain(requests.GetSubArray(startOfPrevious, startOfTwoAgo), meshes, indexInChunk, skeletonBonesCount);
                 if (startOfTwoAgo >= 0)
                     ProcessChain(requests.GetSubArray(startOfTwoAgo, requests.Length - startOfTwoAgo), meshes, indexInChunk, skeletonBonesCount);
 
@@ -1065,8 +1065,6 @@ namespace Latios.Kinemation.Systems
 
             void ProcessChain(NativeArray<MeshSkinningRequest> requests, NativeArray<DependentSkinnedMesh> meshes, int indexInChunk, int skeletonBonesCount)
             {
-                if (requests.Length == 0)
-                    return;
                 uint firstMeshIndex    = requests[0].indexInSkeletonBuffer;
                 uint maxMeshBoneCount  = meshes[(int)firstMeshIndex].boneOffsetsCount;
                 bool hasMultipleMeshes = false;
@@ -1750,10 +1748,9 @@ namespace Latios.Kinemation.Systems
                 SkinningStreamMeshCommand dummy           = default;
                 ref var                   currentCommand  = ref dummy;
                 MeshSkinningRequest       previousRequest = default;
-                bool                      isFirst         = true;
                 foreach (var request in requests)
                 {
-                    if (request.isDqs != previousRequest.isDqs || isFirst)
+                    if (request.isDqs != previousRequest.isDqs)
                     {
                         currentCommand = ref skinningStream.Allocate<SkinningStreamMeshCommand>();
 
@@ -1796,9 +1793,9 @@ namespace Latios.Kinemation.Systems
                         chunkPrefixSums.meshSkinningExtraBoneTransformsCount -= (uint)header.boneTransformCount;
                     }
                     previousRequest = request;
-                    isFirst         = false;
+
+                    chunkPrefixSums.expansionMeshCommandsCount += header.meshCommandCount;
                 }
-                chunkPrefixSums.expansionMeshCommandsCount += header.meshCommandCount;
             }
 
             unsafe void BuildCommandsMultiMeshExpanded(NativeArray<MeshSkinningRequest>  requests,
@@ -2096,7 +2093,7 @@ namespace Latios.Kinemation.Systems
                             {
                                 if (offsets[i] == 0)
                                 {
-                                    boneTransformsUploadBuffer[(int)prefixSums.boneTransformsToUpload + i] = TransformQvvs.identity;
+                                    boneTransformsUploadBuffer[(int)prefixSums.boneTransformsToUpload] = TransformQvvs.identity;
                                     continue;
                                 }
                                 var entity                                                             = bones[offsets[i]].bone;
@@ -2144,7 +2141,7 @@ namespace Latios.Kinemation.Systems
                             {
                                 if (offsets[i] == 0)
                                 {
-                                    boneTransformsUploadBuffer[(int)prefixSums.boneTransformsToUpload + i] = TransformQvvs.identity;
+                                    boneTransformsUploadBuffer[(int)prefixSums.boneTransformsToUpload] = TransformQvvs.identity;
                                     continue;
                                 }
                                 var entity = bones[offsets[i]].bone;
@@ -2199,7 +2196,7 @@ namespace Latios.Kinemation.Systems
                             {
                                 if (offsets[i] == 0)
                                 {
-                                    boneTransformsUploadBuffer[(int)prefixSums.boneTransformsToUpload + i] = TransformQvvs.identity;
+                                    boneTransformsUploadBuffer[(int)prefixSums.boneTransformsToUpload] = TransformQvvs.identity;
                                     continue;
                                 }
                                 var entity = bones[offsets[i]].bone;

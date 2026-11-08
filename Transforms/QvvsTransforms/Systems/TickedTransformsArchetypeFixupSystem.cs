@@ -74,10 +74,9 @@ namespace Latios.Transforms.Systems
                 state.EntityManager.AddComponent(m_rootMissingTickedQuery, new TypePack<TickedWorldTransform, TickedPreviousTransform>());
                 foreach (var entity in entities)
                 {
-                    var qvvs                                                       = GetComponent<WorldTransform>(entity).worldTransform;
-                    SetComponent(entity, new TickedWorldTransform { worldTransform = qvvs });
-                    // Don't do the below, because otherwise we won't detect the spawn position.
-                    //SetComponent(entity, new TickedPreviousTransform { worldTransform = qvvs });
+                    var qvvs                                                          = GetComponent<WorldTransform>(entity).worldTransform;
+                    SetComponent(entity, new TickedWorldTransform { worldTransform    = qvvs });
+                    SetComponent(entity, new TickedPreviousTransform { worldTransform = qvvs });
                 }
             }
             if (!m_rootMissingNormalQuery.IsEmptyIgnoreFilter)
@@ -186,7 +185,7 @@ namespace Latios.Transforms.Systems
                             wasMissingSomething    = true;
                             bitArray[parentIndex] += needsNormalBit;
                         }
-                        if (needsTicked && (bitArray[parentIndex] & needsTickedBit) == 0)
+                        if (needsTicked && (bitArray[parentIndex] & hasTickedBit) == 0)
                         {
                             wasMissingSomething    = true;
                             bitArray[parentIndex] += needsTickedBit;
@@ -210,7 +209,8 @@ namespace Latios.Transforms.Systems
                 else if (rootTickedBits == needsTickedBit)
                 {
                     var qvvs                                                          = state.EntityManager.GetComponentData<WorldTransform>(root).worldTransform;
-                    ecb.AddComponents(root, new TickedWorldTransform { worldTransform = qvvs }, new TickedPreviousTransform { worldTransform = default});
+                    var previousQvvs                                                  = state.EntityManager.HasComponent<Prefab>(root) ? qvvs : default;
+                    ecb.AddComponents(root, new TickedWorldTransform { worldTransform = qvvs }, new TickedPreviousTransform { worldTransform = previousQvvs});
                 }
 
                 for (int i = 1; i < bitArray.Length; i++)
@@ -231,11 +231,12 @@ namespace Latios.Transforms.Systems
                         ecb.RemoveComponent(handle.entity, new TypePack<TickedWorldTransform, TickedPreviousTransform, TickedPreviousLocalTransformCache, TickedTwoAgoTransform>());
                     else if (tickedBits == needsTickedBit)
                     {
-                        var qvvs = state.EntityManager.GetComponentData<WorldTransform>(handle.entity).worldTransform;
+                        var qvvs         = state.EntityManager.GetComponentData<WorldTransform>(handle.entity).worldTransform;
+                        var previousQvvs = state.EntityManager.HasComponent<Prefab>(handle.entity) ? qvvs : default;
                         WorldLocalOps.CopyLocal(in handle, true);
                         ecb.AddComponents(handle.entity,
-                                          new TickedWorldTransform { worldTransform    = qvvs },
-                                          new TickedPreviousTransform { worldTransform = default },
+                                          new TickedWorldTransform { worldTransform    = qvvs},
+                                          new TickedPreviousTransform { worldTransform = previousQvvs},
                                           WorldLocalOps.CopyTickedLocalToCache(in handle));
                     }
                 }

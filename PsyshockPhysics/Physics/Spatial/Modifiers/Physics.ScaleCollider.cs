@@ -75,7 +75,6 @@ namespace Latios.Psyshock
                     sphere.radius *= scale;
                     break;
                 case SphereCollider.StretchMode.IgnoreStretch:
-                    sphere.center *= scale;
                     sphere.radius *= scale;
                     break;
             }

@@ -111,7 +111,7 @@ namespace Latios.Kinemation.Systems
                     for (int j = 0; j < dstBones.Length; j++)
                     {
                         var prev      = previousBones[j];
-                        var curr      = currentBones[j];
+                        var curr      = tickedBones[j];
                         var rot       = math.nlerp(prev.boneTransform.rotation, curr.boneTransform.rotation, factor);
                         var pos       = math.lerp(prev.boneTransform.position, curr.boneTransform.position, factor);
                         var scale     = math.lerp(prev.boneTransform.scale, curr.boneTransform.scale, factor);
@@ -148,7 +148,13 @@ namespace Latios.Kinemation.Systems
             var api = this.GetApi(ref state);
             var job = new Job
             {
-                factor = api.worldBlackboardEntity.GetComponentData<TickingState>().finalTickFraction,
+                boneTransformHandle = GetBufferTypeHandle<OptimizedBoneTransform>(false),
+                factor              = latiosWorld.worldBlackboardEntity.GetComponentData<TickingState>().finalTickFraction,
+                hierarchyHandle     = GetComponentTypeHandle<OptimizedSkeletonHierarchyBlobReference>(true),
+                stateHandle         = GetComponentTypeHandle<OptimizedSkeletonState>(false),
+                tickedBonesHandle   = GetBufferTypeHandle<TickedOptimizedBoneTransform>(true),
+                tickedStateHandle   = GetComponentTypeHandle<TickedOptimizedSkeletonState>(true),
+                transformHandle     = GetComponentTypeHandle<Unity.Transforms.LocalToWorld>(true),
             }.Inject(api);
             state.Dependency = job.ScheduleParallel(m_query, state.Dependency);
         }
@@ -178,7 +184,7 @@ namespace Latios.Kinemation.Systems
                 {
                     var boneBuffer       = boneBuffers[i];
                     DynamicBuffer<OptimizedBoneInertialBlendState> dummyBlendBuffer = default;
-                    var skeletonAspect   = new OptimizedSkeletonAspect(in ltws[i],
+                    var skeletonAspect   = new OptimizedSkeletonAspect(in transformHandle[i],
                                                                        new RefRO<OptimizedSkeletonHierarchyBlobReference>(hierarchies,
                                                                                                                           i),
                                                                        new RefRW<OptimizedSkeletonState>(states, i),
@@ -220,7 +226,7 @@ namespace Latios.Kinemation.Systems
                     for (int j = 0; j < dstBones.Length; j++)
                     {
                         var prev      = previousBones[j];
-                        var curr      = currentBones[j];
+                        var curr      = tickedBones[j];
                         var rot       = math.nlerp(prev.boneTransform.rotation, curr.boneTransform.rotation, factor);
                         var pos       = math.lerp(prev.boneTransform.position, curr.boneTransform.position, factor);
                         var scale     = math.lerp(prev.boneTransform.scale, curr.boneTransform.scale, factor);

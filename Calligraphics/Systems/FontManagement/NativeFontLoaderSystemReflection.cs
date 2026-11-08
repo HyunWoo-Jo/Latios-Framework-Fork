@@ -10,9 +10,6 @@ using Unity.Jobs.LowLevel.Unsafe;
 using UnityEngine;
 using UnityEngine.Networking;
 using UnityEngine.TextCore.LowLevel;
-#if UNITY_ANDROID && !UNITY_EDITOR
-using UnityEngine.Networking;
-#endif
 
 using Font = Latios.Calligraphics.HarfBuzz.Font;
 
@@ -107,8 +104,7 @@ namespace Latios.Calligraphics.Systems
                 //if (!TryGetSystemFontLoadDescription(family.ToString(), subFamily.ToString(), out UnityFontLoadDescription unityFontLoadDescription))
                 if (!systemFontFound)
                 {
-                    Debug.LogWarning(
-                        $"Could not find system font {firstFontLoadDescription.fontFamily} {firstFontLoadDescription.fontSubFamily}. The font may not be installed on this device.");
+                    //Debug.Log($"Could not find system font {sFontLoadDescription.fontFamily} {sFontLoadDescription.fontSubFamily}");
                     return;
                 }
                 //Debug.Log($"Found {fieldInfos[0].GetValue(result)} {fieldInfos[1].GetValue(result)} {fieldInfos[2].GetValue(result)} {fieldInfos[3].GetValue(result)}");

@@ -14,14 +14,7 @@ namespace Latios.Psyshock
 
             public float3 axisInB;
 
-            public float3 targetInInertialPoseBSpace;
-
-            [System.Obsolete("Misspelled. Use targetInInertialPoseBSpace instead.")]
-            public float3 targetInIntertialPoseBSpace
-            {
-                get => targetInInertialPoseBSpace;
-                set => targetInInertialPoseBSpace = value;
-            }
+            public float3 targetInIntertialPoseBSpace;
 
             // Position error at the beginning of the step
             public float initialError;
@@ -65,7 +58,7 @@ namespace Latios.Psyshock
             parameters.maxImpulseOfMotor                 = maxImpulse;
             parameters.axisInB                           = new float3x3(jointTransformInInertialPoseBSpace.rot)[motorizedAxisIndex];
             // (constraint.target[axis of movement] = target) where direction is relative to bodyB. Therefore add this to the pivot of bodyB to anchor the target
-            parameters.targetInInertialPoseBSpace = parameters.axisInB * targetDistance + parameters.jointPositionInInertialPoseBSpace;
+            parameters.targetInIntertialPoseBSpace = parameters.axisInB * targetDistance + parameters.jointPositionInInertialPoseBSpace;
 
             UpdateJacobian(ref parameters, in inertialPoseWorldTransformA, in inertialPoseWorldTransformB);
         }
@@ -172,11 +165,11 @@ namespace Latios.Psyshock
         {
             // Find the direction from pivot A to B and the distance between them
             float3 anchorAInWorld = math.transform(inertialPoseWorldTransformA, parameters.jointPositionInInertialPoseASpace);
-            float3 targetInWorld  = math.transform(inertialPoseWorldTransformB, parameters.targetInInertialPoseBSpace);
+            float3 targetInWorld  = math.transform(inertialPoseWorldTransformB, parameters.jointPositionInInertialPoseBSpace);
             float3 axisInWorld    = math.mul(inertialPoseWorldTransformB.rot, parameters.axisInB);
 
             var   toTargetOffset = targetInWorld - anchorAInWorld;
-            float distance       = -math.dot(toTargetOffset, axisInWorld);
+            float distance       = math.dot(toTargetOffset, axisInWorld);
 
             directionInWorld = -axisInWorld;
 

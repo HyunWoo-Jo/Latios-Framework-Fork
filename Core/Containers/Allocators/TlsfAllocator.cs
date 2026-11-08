@@ -33,12 +33,11 @@ namespace Latios.Unsafe
 
         struct Pool
         {
-            public byte*                            ptr;
-            public long                             byteCount;
-            public int                              elementSize;
-            public int                              numElements;
-            public int                              alignment;
-            public AllocatorManager.AllocatorHandle backingAllocator;
+            public byte* ptr;
+            public long  byteCount;
+            public int   elementSize;
+            public int   numElements;
+            public int   alignment;
         }
 
         UnsafeList<Pool> m_pools;
@@ -85,7 +84,7 @@ namespace Latios.Unsafe
         {
             foreach (var pool in m_pools)
             {
-                AllocatorManager.Free(pool.backingAllocator, pool.ptr, pool.elementSize, pool.alignment, pool.numElements);
+                AllocatorManager.Free(m_backingAllocator, pool.ptr, pool.elementSize, pool.alignment, pool.numElements);
             }
             m_pools.Dispose();
             AllocatorManager.Free(m_backingAllocator, (IntPtr*)m_freeBlocks, 2048);
@@ -97,16 +96,22 @@ namespace Latios.Unsafe
         public void AllocatePool(long minimumSize)
         {
             CheckMultipleOf64((ulong)minimumSize);
-            var poolSize = math.max(minimumSize, m_standardPoolSize);
-            GetRequiredAllocationParameters(poolSize, out var elementSize, out var alignment, out var numElements);
+            var poolSize    = math.max(minimumSize, m_standardPoolSize);
+            var elementSize = (int)poolSize;
+            var numElements = 1;
+            if (poolSize > (1 << 30))
+            {
+                poolSize    = CollectionHelper.Align(poolSize, 1 << 30);
+                elementSize = (1 << 31);
+                numElements = (int)(poolSize / (1 << 30));
+            }
             var pool = new Pool
             {
-                ptr              = (byte*)AllocatorManager.Allocate(m_backingAllocator, elementSize, 64, numElements),
-                byteCount        = poolSize,
-                alignment        = alignment,
-                elementSize      = elementSize,
-                numElements      = numElements,
-                backingAllocator = m_backingAllocator,
+                ptr         = (byte*)AllocatorManager.Allocate(m_backingAllocator, elementSize, 64, numElements),
+                byteCount   = poolSize,
+                alignment   = 64,
+                elementSize = elementSize,
+                numElements = numElements
             };
             m_pools.Add(pool);
 
@@ -131,12 +136,11 @@ namespace Latios.Unsafe
             var poolSize = elementSize * (long)numElements;
             var pool     = new Pool
             {
-                ptr              = ptr,
-                byteCount        = poolSize,
-                alignment        = 64,
-                elementSize      = elementSize,
-                numElements      = numElements,
-                backingAllocator = backingAllocator
+                ptr         = ptr,
+                byteCount   = poolSize,
+                alignment   = 64,
+                elementSize = elementSize,
+                numElements = numElements
             };
             m_pools.Add(pool);
 
@@ -288,8 +292,7 @@ namespace Latios.Unsafe
                     UnityEngine.Debug.LogWarning(
                         $"The TLSF allocator does not have enough free pool memory to allocate {size} bytes. Allocating a new pool for this. This operation may block the currently executing thread for a significant time.");
                 }
-                // Double the size so that the header plus segregation rounding fit
-                AllocatePool((long)requiredSize * 2);
+                AllocatePool((long)requiredSize);
                 return Allocate(size);
             }
 
@@ -311,7 +314,7 @@ namespace Latios.Unsafe
                         UnityEngine.Debug.LogWarning(
                             $"The TLSF allocator does not have enough free pool memory to allocate {size} bytes. Allocating a new pool for this. This operation may block the currently executing thread for a significant time.");
                     }
-                    AllocatePool((long)requiredSize * 2);
+                    AllocatePool((long)requiredSize);
                     return Allocate(size);
                 }
                 firstLevelIndex = firstLevelBits.CountTrailingZeros();

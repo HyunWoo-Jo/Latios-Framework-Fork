@@ -22,7 +22,7 @@ namespace Latios.Psyshock
             float  m   = 0f;
             for (int i = 0; i < individualCentersOfMass.Length; i++)
             {
-                com += individualCentersOfMass[i] * individualMasses[i];
+                com += individualCentersOfMass[i] * m;
                 m   += individualMasses[i];
             }
             return com / m;

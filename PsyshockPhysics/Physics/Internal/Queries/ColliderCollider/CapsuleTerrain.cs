@@ -52,17 +52,16 @@ namespace Latios.Psyshock
                                                         float maxDistance,
                                                         ref T processor) where T : unmanaged, IDistanceBetweenAllProcessor
         {
-            var aabb          = Physics.AabbFrom(capsule, math.mul(math.inverse(terrainTransform), capsuleTransform));
-            aabb.min         -= maxDistance;
-            aabb.max         += maxDistance;
-            var inverseScale  = math.rcp(terrain.scale);
-            var validAxes     = math.isfinite(inverseScale);
+            var aabb         = Physics.AabbFrom(capsule, math.mul(math.inverse(terrainTransform), capsuleTransform));
+            var inverseScale = math.rcp(terrain.scale);
+            var validAxes    = math.isfinite(inverseScale);
 
-            var touches = (aabb.min <= 0f) & (aabb.max >= 0f);
-            if (math.any(!touches & !validAxes))
+            var crosses = (aabb.min < 0f) & (aabb.max > 0f);
+            if (math.any(!crosses & !validAxes))
                 return;
 
             Physics.GetCenterExtents(aabb, out var center, out var extents);
+            extents        += maxDistance;
             center         *= inverseScale;
             extents        *= inverseScale;
             var min         = (int3)math.floor(center - extents);
@@ -83,8 +82,8 @@ namespace Latios.Psyshock
                     capsule          = capsule,
                     capsuleTransform = capsuleTransform,
                     maxDistance      = maxDistance,
-                    minHeight        = (short)math.clamp(minInt.y, short.MinValue, short.MaxValue),
-                    maxHeight        = (short)math.clamp(maxInt.y, short.MinValue, short.MaxValue),
+                    minHeight        = (short)minInt.y,
+                    maxHeight        = (short)maxInt.y,
                     heightOffset     = terrain.baseHeightOffset,
                     scale            = terrain.scale,
                     terrainTransform = terrainTransform,
@@ -138,8 +137,8 @@ namespace Latios.Psyshock
                 castStart        = castStart,
                 castEnd          = castEnd,
                 terrainTransform = targetTerrainTransform,
-                minHeight        = (short)math.clamp(minInt.y, short.MinValue, short.MaxValue),
-                maxHeight        = (short)math.clamp(maxInt.y, short.MinValue, short.MaxValue),
+                minHeight        = (short)minInt.y,
+                maxHeight        = (short)maxInt.y,
                 heightOffset     = targetTerrain.baseHeightOffset,
                 scale            = targetTerrain.scale,
             };
@@ -215,11 +214,11 @@ namespace Latios.Psyshock
                 found            = false,
                 invalid          = false,
                 capsule          = targetCapsule,
-                castStart        = targetInCasterSpace,
-                castEnd          = reverseCastEnd,
+                castStart        = castStart,
+                castEnd          = castEnd,
                 terrainTransform = RigidTransform.identity,
-                minHeight        = (short)math.clamp(minInt.y, short.MinValue, short.MaxValue),
-                maxHeight        = (short)math.clamp(maxInt.y, short.MinValue, short.MaxValue),
+                minHeight        = (short)minInt.y,
+                maxHeight        = (short)maxInt.y,
                 heightOffset     = terrainToCast.baseHeightOffset,
                 scale            = terrainToCast.scale,
             };

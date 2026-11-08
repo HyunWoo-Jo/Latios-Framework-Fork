@@ -139,7 +139,6 @@ namespace Latios.Unika
         {
             br              = baseResolver;
             map             = AllocatorManager.Allocate<UnsafeHashMap<Entity, EntityScriptCollection> >(allocator, 1);
-            *map            = new UnsafeHashMap<Entity, EntityScriptCollection>(64, allocator);
             lastAccessed    = default;
             allocatorHandle = allocator;
         }
@@ -156,12 +155,9 @@ namespace Latios.Unika
         {
             if (map != null)
             {
-                br.Dispose();
                 map->Dispose();
                 AllocatorManager.Free(allocatorHandle, map, 1);
-                map = null;
             }
-            lastAccessed = default;
         }
 
         /// <summary>
@@ -171,13 +167,12 @@ namespace Latios.Unika
         {
             if (map != null)
                 map->Clear();
-            lastAccessed = default;
         }
 
         /// <inheritdoc/>
         public bool TryGet(Entity entity, out EntityScriptCollection allScripts, bool throwSafetyErrorIfNotFound = false)
         {
-            if (entity == lastAccessed.entity && entity != Entity.Null)
+            if (entity == lastAccessed.entity)
             {
                 allScripts = lastAccessed;
                 return true;
@@ -190,7 +185,6 @@ namespace Latios.Unika
             }
             if (br.TryGet(entity, out allScripts, throwSafetyErrorIfNotFound))
             {
-                map->Add(entity, allScripts);
                 lastAccessed = allScripts;
                 return true;
             }

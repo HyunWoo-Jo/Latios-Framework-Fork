@@ -78,8 +78,6 @@ namespace Latios.Unika
 
         public static implicit operator Script(Script<T> script)
         {
-            if (!script.m_scriptBuffer.IsCreated)
-                return default;
             return new Script
             {
                 m_scriptBuffer = script.m_scriptBuffer,
@@ -89,29 +87,19 @@ namespace Latios.Unika
             };
         }
 
-        public static implicit operator ScriptRef<T>(Script<T> script)
+        public static implicit operator ScriptRef<T>(Script<T> script) => new ScriptRef<T>
         {
-            if (!script.m_scriptBuffer.IsCreated)
-                return default;
-            return new ScriptRef<T>
-            {
-                m_entity            = script.m_entity,
-                m_instanceId        = script.m_headerRO.instanceId,
-                m_cachedHeaderIndex = (script.m_headerOffset / UnsafeUtility.SizeOf<ScriptHeader>()) - 1
-            };
-        }
+            m_entity            = script.m_entity,
+            m_instanceId        = script.m_headerRO.instanceId,
+            m_cachedHeaderIndex = (script.m_headerOffset / UnsafeUtility.SizeOf<ScriptHeader>()) - 1
+        };
 
-        public static implicit operator ScriptRef(Script<T> script)
+        public static implicit operator ScriptRef(Script<T> script) => new ScriptRef
         {
-            if (!script.m_scriptBuffer.IsCreated)
-                return default;
-            return new ScriptRef
-            {
-                m_entity            = script.m_entity,
-                m_instanceId        = script.m_headerRO.instanceId,
-                m_cachedHeaderIndex = (script.m_headerOffset / UnsafeUtility.SizeOf<ScriptHeader>()) - 1
-            };
-        }
+            m_entity            = script.m_entity,
+            m_instanceId        = script.m_headerRO.instanceId,
+            m_cachedHeaderIndex = (script.m_headerOffset / UnsafeUtility.SizeOf<ScriptHeader>()) - 1
+        };
         #endregion
 
         #region Type operations
@@ -126,9 +114,9 @@ namespace Latios.Unika
 
         public bool Equals(Script<T> other) => this == other;
 
-        public override bool Equals(object obj) => obj is Script<T> other && Equals(other);
+        public override bool Equals(object obj) => ((Script)this).Equals(obj);
 
-        public override int GetHashCode() => ((Script)this).GetHashCode();
+        public override int GetHashCode() => new int2(m_entity.GetHashCode(), m_headerRO.instanceId).GetHashCode();
 
         public override string ToString() => ((Script)this).ToString();
 

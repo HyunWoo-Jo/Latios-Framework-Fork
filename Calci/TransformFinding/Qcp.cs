@@ -61,9 +61,6 @@ using Unity.Mathematics;
 
 namespace Latios.Calci
 {
-    // Todo: The original implementation used a newton refinement of lambda for 50 iterations.
-    // This refinement was dropped in the EWBIK reference. However, there's probably a sweet spot
-    // for floating-point precision with far fewer iterations than 50 that could improve quality.
     public static class Qcp
     {
         /// <summary>
@@ -97,8 +94,7 @@ namespace Latios.Calci
 
             if (currentPoints.Length == 1)
             {
-                var rotation = UnityEngine.Quaternion.FromToRotation(currentPoints[0] - currentShift, targetPoints[0] - targetShift);
-                return new RigidTransform(rotation, targetShift - math.rotate(rotation, currentShift));
+                return new RigidTransform(UnityEngine.Quaternion.FromToRotation(currentPoints[0] - currentShift, targetPoints[0] - targetShift), targetShift - currentShift);
             }
 
             // Inline the calculation of the inner product.
@@ -123,8 +119,8 @@ namespace Latios.Calci
             {
                 for (int i = 0; i < currentPoints.Length; i++)
                 {
-                    var a   = targetPoints[i] - targetShift;
-                    innerA += math.lengthsq(a);
+                    var a   = targetPoints[i];
+                    innerA += math.distancesq(a, targetShift);
                     var b   = currentPoints[i];
                     innerB += math.distancesq(b, currentShift);
                     mat    += new float3x3(a.x * b, a.y * b, a.z * b);
@@ -165,7 +161,7 @@ namespace Latios.Calci
             quat.w = kMat.c1.y * a2233_3223 - kMat.c1.z * a2133_3123 + kMat.c1.w * a2132_3122;
             quat.x = -kMat.c1.x * a2233_3223 + kMat.c1.z * a2033_3023 - kMat.c1.w * a2032_3022;
             quat.y = kMat.c1.x * a2133_3123 - kMat.c1.y * a2033_3023 + kMat.c1.w * a2031_3021;
-            quat.z = -kMat.c1.x * a2132_3122 + kMat.c1.y * a2032_3022 - kMat.c1.z * a2031_3021;
+            quat.z = -kMat.c1.x * a2132_3122 + kMat.c1.y * a2032_3022 + kMat.c1.z * a2031_3021;
 
             var quatSq = math.lengthsq(quat);
 
@@ -177,7 +173,7 @@ namespace Latios.Calci
                 quat.w = kMat.c0.y * a2233_3223 - kMat.c0.z * a2133_3123 + kMat.c0.w * a2132_3122;
                 quat.x = -kMat.c0.x * a2233_3223 + kMat.c0.z * a2033_3023 - kMat.c0.w * a2032_3022;
                 quat.y = kMat.c0.x * a2133_3123 - kMat.c0.y * a2033_3023 + kMat.c0.w * a2031_3021;
-                quat.z = -kMat.c0.x * a2132_3122 + kMat.c0.y * a2032_3022 - kMat.c0.z * a2031_3021;
+                quat.z = -kMat.c0.x * a2132_3122 + kMat.c0.y * a2032_3022 + kMat.c0.z * a2031_3021;
                 quatSq = math.lengthsq(quat);
 
                 if (quatSq < kEvecPrec)
@@ -216,7 +212,7 @@ namespace Latios.Calci
             if (min > kEvecPrec)
                 quat /= min;
             var rot   = math.normalize(new quaternion(quat));
-            return new RigidTransform(rot, targetShift - math.rotate(rot, currentShift));
+            return new RigidTransform(rot, targetShift - currentShift);
         }
 
         static float3 CenterOf(ReadOnlySpan<float3> points)

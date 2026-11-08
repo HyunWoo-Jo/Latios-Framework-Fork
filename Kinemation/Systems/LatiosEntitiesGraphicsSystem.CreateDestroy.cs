@@ -26,16 +26,6 @@ namespace Latios.Kinemation.Systems
     {
         protected override void OnCreate()
         {
-            // If -nographics is enabled, or if there is no compute shader support, disable HR.
-            // This must run before the BatchRendererGroup steal below, because Unity's system
-            // never creates one to steal when it disabled itself for the same reason.
-            if (!EntitiesGraphicsEnabled)
-            {
-                Enabled = false;
-                Debug.Log("No SRP present, no compute shader support, or running with -nographics. Kinemation rendering disabled");
-                return;
-            }
-
             m_unityEntitiesGraphicsSystem         = World.GetExistingSystemManaged<EntitiesGraphicsSystem>();
             m_unityEntitiesGraphicsSystem.Enabled = false;
 
@@ -98,9 +88,6 @@ namespace Latios.Kinemation.Systems
 
         protected override void OnDestroy()
         {
-            if (!EntitiesGraphicsEnabled)
-                return;
-
             UnityEngine.Application.onBeforeRender -= OnBeginRendering;
             m_unmanaged.OnDestroy();
             if (ErrorShaderEnabled)
@@ -119,6 +106,14 @@ namespace Latios.Kinemation.Systems
             public void OnCreate(ref SystemState state, BatchRendererGroup batchRendererGroup)
             {
                 latiosWorld = state.GetLatiosWorldUnmanaged();
+
+                // If -nographics is enabled, or if there is no compute shader support, disable HR.
+                if (!EntitiesGraphicsEnabled)
+                {
+                    state.Enabled = false;
+                    Debug.Log("No SRP present, no compute shader support, or running with -nographics. Entities Graphics package disabled");
+                    return;
+                }
 
                 m_cullingDispatchSuperSystem = state.World.GetOrCreateSystemManaged<KinemationCullingDispatchSuperSystem>().SystemHandle;
                 latiosWorld.worldBlackboardEntity.AddComponent<CullingContext>();
@@ -212,8 +207,7 @@ namespace Latios.Kinemation.Systems
 
                 m_GraphicsArchetypes = new EntitiesGraphicsArchetypes(256);
 
-                m_FilterSettings                  = new NativeParallelHashMap<int, BatchFilterSettings>(256, Allocator.Persistent);
-                m_brgRenderMeshArrayIdToIndexMaps = new NativeHashMap<int, BrgRenderMeshArrayIdToIndexMaps>(256, Allocator.Persistent);
+                m_FilterSettings = new NativeParallelHashMap<int, BatchFilterSettings>(256, Allocator.Persistent);
 
                 // Some hardcoded mappings to avoid dependencies to Hybrid from DOTS (*cough Latios Transforms)
                 RegisterMaterialPropertyType<WorldToLocal_Tag>(                            "unity_WorldToObject",   overrideTypeSizeGPU: 4 * 4 * 3);
@@ -357,9 +351,6 @@ namespace Latios.Kinemation.Systems
                 m_GraphicsArchetypes.Dispose();
 
                 m_FilterSettings.Dispose();
-                foreach (var pair in m_brgRenderMeshArrayIdToIndexMaps)
-                    pair.Value.Dispose();
-                m_brgRenderMeshArrayIdToIndexMaps.Dispose();
 
                 if (!m_cullingCallbackFinalJobHandles.IsEmpty)
                     JobHandle.CompleteAll(m_cullingCallbackFinalJobHandles.AsArray());

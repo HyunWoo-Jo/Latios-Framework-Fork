@@ -235,7 +235,7 @@ namespace Latios.Psyshock
         /// This check is always valid regardless of whether such a buffer would be
         /// safe to access.
         /// </summary>
-        public bool HasBuffer(SafeEntity safeEntity) => lookup.HasBuffer(safeEntity);
+        public bool HasBuffer(SafeEntity safeEntity) => lookup.HasBuffer(safeEntity.m_entity);
 
         /// <summary>
         /// This is identical to BufferFromEntity<typeparamref name="T"/>.DidChange().

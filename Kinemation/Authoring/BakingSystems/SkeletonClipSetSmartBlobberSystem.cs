@@ -261,25 +261,23 @@ namespace Latios.Kinemation.Authoring.Systems
             if (m_transformsCache == null)
                 m_transformsCache = new List<Transform>();
 
-            var shadowToBaseTransformsMap = new NativeHashMap<UnityObjectRef<GameObject>, NativeArray<TransformQvvs> >(128, WorldUpdateAllocator);
+            var shadowToBaseScalesMap = new NativeHashMap<UnityObjectRef<GameObject>, NativeArray<float> >(128, WorldUpdateAllocator);
 
             foreach ((var parentIndices, var sampledBoneTransforms, var clipsToBake, var shadowRef) in
                      SystemAPI.Query<DynamicBuffer<SkeletonClipSetBoneParentIndex>, DynamicBuffer<SampledBoneTransform>, DynamicBuffer<SkeletonClipToBake>,
                                      RefRO<ShadowHierarchyReference> >()
                      .WithOptions(EntityQueryOptions.IncludePrefab | EntityQueryOptions.IncludeDisabledEntities))
             {
-                var shadow         = shadowRef.ValueRO.shadowHierarchyRoot.Value;
-                var taa            = FetchParentsAndTransformAccessArray(parentIndices, shadow);
-                var baseTransforms = GetOrCreateBaseTransforms(ref shadowToBaseTransformsMap, shadowRef.ValueRO.shadowHierarchyRoot, taa);
+                var shadow     = shadowRef.ValueRO.shadowHierarchyRoot.Value;
+                var taa        = FetchParentsAndTransformAccessArray(parentIndices, shadow);
+                var baseScales = GetOrCreateBaseScales(ref shadowToBaseScalesMap, shadowRef.ValueRO.shadowHierarchyRoot, taa);
 
                 for (int i = 0; i < clipsToBake.Length; i++)
                 {
-                    ref var clip          = ref clipsToBake.ElementAt(i);
-                    var     startAndCount =
-                        SampleClip(sampledBoneTransforms, taa, baseTransforms, clip.clip, clip.settings.copyFirstKeyAtEnd, clip.settings.rootMotionOverrideMode);
+                    ref var clip            = ref clipsToBake.ElementAt(i);
+                    var     startAndCount   = SampleClip(sampledBoneTransforms, taa, baseScales, clip.clip, clip.settings.copyFirstKeyAtEnd, clip.settings.rootMotionOverrideMode);
                     clip.boneTransformStart = startAndCount.x;
                     clip.boneTransformCount = startAndCount.y;
-                    RestoreBaseTransforms(taa, baseTransforms);
                 }
 
                 taa.Dispose();
@@ -319,32 +317,24 @@ namespace Latios.Kinemation.Authoring.Systems
             return taa;
         }
 
-        NativeArray<TransformQvvs> GetOrCreateBaseTransforms(ref NativeHashMap<UnityObjectRef<GameObject>, NativeArray<TransformQvvs> > shadowToBaseTransformsMap,
-                                                             UnityObjectRef<GameObject> shadow,
-                                                             TransformAccessArray shadowHierarchy)
+        NativeArray<float> GetOrCreateBaseScales(ref NativeHashMap<UnityObjectRef<GameObject>, NativeArray<float> > shadowToScalesMap,
+                                                 UnityObjectRef<GameObject> shadow,
+                                                 TransformAccessArray shadowHierarchy)
         {
-            if (shadowToBaseTransformsMap.TryGetValue(shadow, out var baseTransforms))
-                return baseTransforms;
-            baseTransforms = CollectionHelper.CreateNativeArray<TransformQvvs>(shadowHierarchy.length, WorldUpdateAllocator, NativeArrayOptions.UninitializedMemory);
-            new CaptureBaseTransformsJob
+            if (shadowToScalesMap.TryGetValue(shadow, out var scales))
+                return scales;
+            scales = CollectionHelper.CreateNativeArray<float>(shadowHierarchy.length, WorldUpdateAllocator, NativeArrayOptions.UninitializedMemory);
+            new CaptureBaseScalesJob
             {
-                baseTransforms = baseTransforms
+                baseScales = scales
             }.RunReadOnly(shadowHierarchy);
-            shadowToBaseTransformsMap.Add(shadow, baseTransforms);
-            return baseTransforms;
-        }
-
-        void RestoreBaseTransforms(TransformAccessArray shadowHierarchy, NativeArray<TransformQvvs> baseTransforms)
-        {
-            new RestoreBaseTransformsJob
-            {
-                baseTransforms = baseTransforms
-            }.Schedule(shadowHierarchy).Complete();
+            shadowToScalesMap.Add(shadow, scales);
+            return scales;
         }
 
         int2 SampleClip(DynamicBuffer<SampledBoneTransform>                    appendNewSamplesToThis,
                         TransformAccessArray shadowHierarchy,
-                        NativeArray<TransformQvvs>                             baseTransforms,
+                        NativeArray<float>                                     baseScales,
                         AnimationClip clip,
                         bool copyFirstPose,
                         SkeletonClipCompressionSettings.RootMotionOverrideMode rootMotionMode)
@@ -372,7 +362,7 @@ namespace Latios.Kinemation.Authoring.Systems
             var   job      = new CaptureBoneSamplesJob
             {
                 boneTransforms = boneTransforms,
-                baseTransforms = baseTransforms,
+                baseScales     = baseScales,
                 samplesPerBone = requiredSamples,
                 currentSample  = 0
             };
@@ -402,29 +392,17 @@ namespace Latios.Kinemation.Authoring.Systems
         }
 
         [BurstCompile]
-        partial struct CaptureBaseTransformsJob : IJobParallelForTransform
+        partial struct CaptureBaseScalesJob : IJobParallelForTransform
         {
             [NativeDisableParallelForRestriction]  // Why is this necessary when we are using RunReadOnly()?
-            public NativeArray<TransformQvvs> baseTransforms;
+            public NativeArray<float> baseScales;
 
             public void Execute(int index, TransformAccess transform)
             {
-                TransformBakeUtils.GetScaleAndStretch(transform.localScale, out var scale, out var stretch);
-                baseTransforms[index] = new TransformQvvs(transform.localPosition, transform.localRotation, scale, stretch);
-            }
-        }
-
-        [BurstCompile]
-        partial struct RestoreBaseTransformsJob : IJobParallelForTransform
-        {
-            [NativeDisableParallelForRestriction]
-            public NativeArray<TransformQvvs> baseTransforms;
-
-            public void Execute(int index, TransformAccess transform)
-            {
-                var captured         = baseTransforms[index];
-                transform.localScale = captured.scale * captured.stretch;
-                transform.SetLocalPositionAndRotation(captured.position, captured.rotation);
+                //int target = index * samplesPerBone + currentSample;
+                //boneTransforms[target] = new TransformQvvs(transform.localPosition, transform.localRotation, 1f, transform.localScale);
+                TransformBakeUtils.GetScaleAndStretch(transform.localScale, out var scale, out _);
+                baseScales[index] = scale;
             }
         }
 
@@ -432,15 +410,15 @@ namespace Latios.Kinemation.Authoring.Systems
         partial struct CaptureBoneSamplesJob : IJobParallelForTransform
         {
             [NativeDisableParallelForRestriction]  // Why is this necessary when we are using RunReadOnly()?
-            public NativeArray<TransformQvvs>            boneTransforms;
-            [ReadOnly] public NativeArray<TransformQvvs> baseTransforms;
-            public int                                   samplesPerBone;
-            public int                                   currentSample;
+            public NativeArray<TransformQvvs>    boneTransforms;
+            [ReadOnly] public NativeArray<float> baseScales;
+            public int                           samplesPerBone;
+            public int                           currentSample;
 
             public void Execute(int index, TransformAccess transform)
             {
                 int target    = index * samplesPerBone + currentSample;
-                var baseScale = baseTransforms[index].scale;
+                var baseScale = baseScales[index];
                 if (math.abs(baseScale) < math.EPSILON)
                     baseScale          = math.EPSILON;
                 var localScale         = transform.localScale / baseScale;

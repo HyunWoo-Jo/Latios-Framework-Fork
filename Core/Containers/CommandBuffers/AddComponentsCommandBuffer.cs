@@ -18,15 +18,10 @@ namespace Latios
     public struct AddComponentsCommandBuffer : INativeDisposable
     {
         #region Structure
-        struct State
-        {
-            public ComponentTypeSet                       typesToAdd;
-            public AddComponentsDestroyedEntityResolution resolution;
-            public bool                                   playedBack;
-        }
-
-        private EntityOperationCommandBuffer m_entityOperationCommandBuffer;
-        private NativeReference<State>       m_state;
+        private EntityOperationCommandBuffer           m_entityOperationCommandBuffer;
+        private ComponentTypeSet                       m_typesToAdd;
+        private AddComponentsDestroyedEntityResolution m_resolution;
+        private NativeReference<bool>                  m_playedBack;
         #endregion
 
         #region CreateDestroy
@@ -38,12 +33,9 @@ namespace Latios
         public AddComponentsCommandBuffer(AllocatorManager.AllocatorHandle allocator, AddComponentsDestroyedEntityResolution resolution)
         {
             m_entityOperationCommandBuffer = new EntityOperationCommandBuffer(allocator);
-            m_state                        = new NativeReference<State>(new State
-            {
-                typesToAdd = default,
-                resolution = resolution,
-                playedBack = default
-            }, allocator);
+            m_typesToAdd                   = default;
+            m_resolution                   = resolution;
+            m_playedBack                   = new NativeReference<bool>(allocator);
         }
 
         /// <summary>
@@ -54,7 +46,7 @@ namespace Latios
         public JobHandle Dispose(JobHandle inputDeps)
         {
             var jh0 = m_entityOperationCommandBuffer.Dispose(inputDeps);
-            var jh1 = m_state.Dispose(inputDeps);
+            var jh1 = m_playedBack.Dispose(inputDeps);
             return JobHandle.CombineDependencies(jh0, jh1);
         }
 
@@ -64,7 +56,7 @@ namespace Latios
         public void Dispose()
         {
             m_entityOperationCommandBuffer.Dispose();
-            m_state.Dispose();
+            m_playedBack.Dispose();
         }
         #endregion
 
@@ -100,9 +92,9 @@ namespace Latios
         /// Set additional component types to be added to the target entities. These components will be default-initialized.
         /// </summary>
         /// <param name="tags">The types to add to each target entity</param>
-        public unsafe void SetComponentTags(ComponentTypeSet tags)
+        public void SetComponentTags(ComponentTypeSet tags)
         {
-            m_state.GetUnsafePtr()->typesToAdd = tags;
+            m_typesToAdd = tags;
         }
 
         /// <summary>
@@ -120,7 +112,7 @@ namespace Latios
         void CheckDidNotPlayback()
         {
 #if ENABLE_UNITY_COLLECTIONS_CHECKS || UNITY_DOTS_DEBUG
-            if (m_state.Value.playedBack == true)
+            if (m_playedBack.Value == true)
                 throw new System.InvalidOperationException(
                     "The AddComponentsCommandBuffer has already been played back. You cannot write more commands to it or play it back again.");
 #endif
@@ -145,19 +137,18 @@ namespace Latios
                     }
                     else
                     {
-                        if (accb->m_state.Value.resolution == AddComponentsDestroyedEntityResolution.ThrowException)
+                        if (accb->m_resolution == AddComponentsDestroyedEntityResolution.ThrowException)
                             throw new System.InvalidOperationException($"Entity {e.ToFixedString()} in AddComponentsCommandBuffer has been destroyed.");
-                        else if (accb->m_state.Value.resolution == AddComponentsDestroyedEntityResolution.AddToNewEntityAndDestroy)
+                        else if (accb->m_resolution == AddComponentsDestroyedEntityResolution.AddToNewEntityAndDestroy)
                         {
                             e = em->CreateEntity();
-                            em->AddComponent(e, accb->m_state.Value.typesToAdd);
-                            em->DestroyEntity(e);
+                            em->AddComponent(e, accb->m_typesToAdd);
                         }
                     }
                 }
-                targets = targets.GetSubArray(0, dst);
-                em->AddComponent(targets, accb->m_state.Value.typesToAdd);
-                accb->m_state.GetUnsafePtr()->playedBack = true;
+                targets.GetSubArray(0, dst);
+                em->AddComponent(targets, in accb->m_typesToAdd);
+                accb->m_playedBack.Value = true;
             }
         }
         #endregion

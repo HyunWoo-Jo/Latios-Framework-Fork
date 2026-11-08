@@ -6,161 +6,161 @@ using Unity.Mathematics;
 
 namespace Latios.Psyshock.Authoring
 {
-    namespace Systems
+namespace Systems
+{
+    [DisableAutoCreation]
+    public class SphereColliderBaker : Baker<UnityEngine.SphereCollider>
     {
-        [DisableAutoCreation]
-        public class SphereColliderBaker : Baker<UnityEngine.SphereCollider>
+        public override void Bake(UnityEngine.SphereCollider authoring)
         {
-            public override void Bake(UnityEngine.SphereCollider authoring)
-            {
-                if (!this.ShouldBakeSingleCollider(authoring))
-                    return;
+            if (!this.ShouldBakeSingleCollider(authoring))
+                return;
 
-                var entity = GetEntity(TransformUsageFlags.Renderable);
-                AddComponent(entity, (Collider) new SphereCollider
-                {
-                    center      = authoring.center,
-                    radius      = authoring.radius,
-                    stretchMode = SphereCollider.StretchMode.StretchCenter
-                });
+            var entity = GetEntity(TransformUsageFlags.Renderable);
+            AddComponent(entity, (Collider) new SphereCollider
+            {
+                center      = authoring.center,
+                radius      = authoring.radius,
+                stretchMode = SphereCollider.StretchMode.StretchCenter
+            });
+        }
+    }
+
+    [DisableAutoCreation]
+    public class CapsuleColliderBaker : Baker<UnityEngine.CapsuleCollider>
+    {
+        public override void Bake(UnityEngine.CapsuleCollider authoring)
+        {
+            if (!this.ShouldBakeSingleCollider(authoring))
+                return;
+
+            float3 dir;
+            if (authoring.direction == 0)
+            {
+                dir = new float3(1f, 0f, 0f);
             }
+            else if (authoring.direction == 1)
+            {
+                dir = new float3(0f, 1, 0f);
+            }
+            else
+            {
+                dir = new float3(0f, 0f, 1f);
+            }
+            var entity = GetEntity(TransformUsageFlags.Renderable);
+            AddComponent(entity, (Collider) new CapsuleCollider
+            {
+                pointB      = (float3)authoring.center + ((authoring.height / 2f - authoring.radius) * dir),
+                pointA      = (float3)authoring.center - ((authoring.height / 2f - authoring.radius) * dir),
+                radius      = authoring.radius,
+                stretchMode = CapsuleCollider.StretchMode.StretchPoints
+            });
+        }
+    }
+
+    [DisableAutoCreation]
+    public class BoxColliderBaker : Baker<UnityEngine.BoxCollider>
+    {
+        public override void Bake(UnityEngine.BoxCollider authoring)
+        {
+            if (!this.ShouldBakeSingleCollider(authoring))
+                return;
+
+            var entity = GetEntity(TransformUsageFlags.Renderable);
+            AddComponent(entity, (Collider) new BoxCollider
+            {
+                center   = authoring.center,
+                halfSize = authoring.size / 2f
+            });
+        }
+    }
+
+    [TemporaryBakingType]
+    public struct MeshColliderBakeItem : ISmartBakeItem<UnityEngine.MeshCollider>
+    {
+        SmartBlobberHandle<ConvexColliderBlob>  m_convexHandle;
+        SmartBlobberHandle<TriMeshColliderBlob> m_triMeshHandle;
+        bool                                    isConvex;
+
+        public bool Bake(UnityEngine.MeshCollider authoring, IBaker baker)
+        {
+            if (!baker.ShouldBakeSingleCollider(authoring))
+                return false;
+
+            var entity = baker.GetEntity(TransformUsageFlags.Renderable);
+            baker.AddComponent<Collider>(entity);
+            isConvex = authoring.convex;
+            if (isConvex)
+                m_convexHandle = baker.RequestCreateConvexBlobAsset(authoring.sharedMesh);
+            else
+                m_triMeshHandle = baker.RequestCreateTriMeshBlobAsset(authoring.sharedMesh);
+            return m_convexHandle.IsValid | m_triMeshHandle.IsValid;
         }
 
-        [DisableAutoCreation]
-        public class CapsuleColliderBaker : Baker<UnityEngine.CapsuleCollider>
+        public void PostProcessBlobRequests(EntityManager entityManager, Entity entity)
         {
-            public override void Bake(UnityEngine.CapsuleCollider authoring)
+            if (isConvex)
             {
-                if (!this.ShouldBakeSingleCollider(authoring))
-                    return;
-
-                float3 dir;
-                if (authoring.direction == 0)
+                Collider collider = new ConvexCollider
                 {
-                    dir = new float3(1f, 0f, 0f);
-                }
-                else if (authoring.direction == 1)
-                {
-                    dir = new float3(0f, 1, 0f);
-                }
-                else
-                {
-                    dir = new float3(0f, 0f, 1f);
-                }
-                var entity = GetEntity(TransformUsageFlags.Renderable);
-                AddComponent(entity, (Collider) new CapsuleCollider
-                {
-                    pointB      = (float3)authoring.center + ((authoring.height / 2f - authoring.radius) * dir),
-                    pointA      = (float3)authoring.center - ((authoring.height / 2f - authoring.radius) * dir),
-                    radius      = authoring.radius,
-                    stretchMode = CapsuleCollider.StretchMode.StretchPoints
-                });
+                    convexColliderBlob = m_convexHandle.Resolve(entityManager),
+                    scale              = 1f
+                };
+                entityManager.SetComponentData(entity, collider);
             }
-        }
-
-        [DisableAutoCreation]
-        public class BoxColliderBaker : Baker<UnityEngine.BoxCollider>
-        {
-            public override void Bake(UnityEngine.BoxCollider authoring)
+            else
             {
-                if (!this.ShouldBakeSingleCollider(authoring))
-                    return;
-
-                var entity = GetEntity(TransformUsageFlags.Renderable);
-                AddComponent(entity, (Collider) new BoxCollider
+                Collider collider = new TriMeshCollider
                 {
-                    center   = authoring.center,
-                    halfSize = authoring.size / 2f
-                });
-            }
-        }
-
-        [TemporaryBakingType]
-        public struct MeshColliderBakeItem : ISmartBakeItem<UnityEngine.MeshCollider>
-        {
-            SmartBlobberHandle<ConvexColliderBlob>  m_convexHandle;
-            SmartBlobberHandle<TriMeshColliderBlob> m_triMeshHandle;
-            bool                                    isConvex;
-
-            public bool Bake(UnityEngine.MeshCollider authoring, IBaker baker)
-            {
-                if (!baker.ShouldBakeSingleCollider(authoring))
-                    return false;
-
-                var entity = baker.GetEntity(TransformUsageFlags.Renderable);
-                baker.AddComponent<Collider>(entity);
-                isConvex = authoring.convex;
-                if (isConvex)
-                    m_convexHandle = baker.RequestCreateConvexBlobAsset(authoring.sharedMesh);
-                else
-                    m_triMeshHandle = baker.RequestCreateTriMeshBlobAsset(authoring.sharedMesh);
-                return m_convexHandle.IsValid | m_triMeshHandle.IsValid;
-            }
-
-            public void PostProcessBlobRequests(EntityManager entityManager, Entity entity)
-            {
-                if (isConvex)
-                {
-                    Collider collider = new ConvexCollider
-                    {
-                        convexColliderBlob = m_convexHandle.Resolve(entityManager),
-                        scale              = 1f
-                    };
-                    entityManager.SetComponentData(entity, collider);
-                }
-                else
-                {
-                    Collider collider = new TriMeshCollider
-                    {
-                        triMeshColliderBlob = m_triMeshHandle.Resolve(entityManager),
-                        scale               = 1f
-                    };
-                    entityManager.SetComponentData(entity, collider);
-                }
-            }
-        }
-
-        [DisableAutoCreation]
-        public class MeshColliderBaker : SmartBaker<UnityEngine.MeshCollider, MeshColliderBakeItem>
-        {
-        }
-
-        [TemporaryBakingType]
-        public struct CompoundColliderBakerWorker : ISmartBakeItem<UnityEngine.Collider>
-        {
-            SmartBlobberHandle<CompoundColliderBlob> m_handle;
-
-            public bool Bake(UnityEngine.Collider authoring, IBaker baker)
-            {
-                var mode = baker.GetMultiColliderBakeMode(authoring, out var colliders);
-                if (mode != MultiColliderBakeMode.PrimaryOfMultiCollider)
-                    return false;
-
-                var entity = baker.GetEntity(TransformUsageFlags.Renderable);
-                baker.AddComponent<Collider>(entity);
-                var transform = baker.GetComponent<UnityEngine.Transform>();
-                m_handle      = baker.RequestCreateBlobAsset(colliders, transform);
-                return true;
-            }
-
-            public void PostProcessBlobRequests(EntityManager entityManager, Entity entity)
-            {
-                Collider collider = new CompoundCollider
-                {
-                    compoundColliderBlob = m_handle.Resolve(entityManager),
-                    scale                = 1f,
-                    stretch              = 1f
+                    triMeshColliderBlob = m_triMeshHandle.Resolve(entityManager),
+                    scale               = 1f
                 };
                 entityManager.SetComponentData(entity, collider);
             }
         }
+    }
 
-        [BakeDerivedTypes]
-        [DisableAutoCreation]
-        public class CompoundColliderBaker : SmartBaker<UnityEngine.Collider, CompoundColliderBakerWorker>
+    [DisableAutoCreation]
+    public class MeshColliderBaker : SmartBaker<UnityEngine.MeshCollider, MeshColliderBakeItem>
+    {
+    }
+
+    [TemporaryBakingType]
+    public struct CompoundColliderBakerWorker : ISmartBakeItem<UnityEngine.Collider>
+    {
+        SmartBlobberHandle<CompoundColliderBlob> m_handle;
+
+        public bool Bake(UnityEngine.Collider authoring, IBaker baker)
         {
+            var mode = baker.GetMultiColliderBakeMode(authoring, out var colliders);
+            if (mode != MultiColliderBakeMode.PrimaryOfMultiCollider)
+                return false;
+
+            var entity = baker.GetEntity(TransformUsageFlags.Renderable);
+            baker.AddComponent<Collider>(entity);
+            var transform = baker.GetComponent<UnityEngine.Transform>();
+            m_handle      = baker.RequestCreateBlobAsset(colliders, transform);
+            return true;
+        }
+
+        public void PostProcessBlobRequests(EntityManager entityManager, Entity entity)
+        {
+            Collider collider = new CompoundCollider
+            {
+                compoundColliderBlob = m_handle.Resolve(entityManager),
+                scale                = 1f,
+                stretch              = 1f
+            };
+            entityManager.SetComponentData(entity, collider);
         }
     }
+
+    [BakeDerivedTypes]
+    [DisableAutoCreation]
+    public class CompoundColliderBaker : SmartBaker<UnityEngine.Collider, CompoundColliderBakerWorker>
+    {
+    }
+}
 
     /// <summary>
     /// Determines how the collider will be baked using default collider baking
@@ -230,13 +230,9 @@ namespace Latios.Psyshock.Authoring
                     continue;
                 if (compoundAuthoring.generateFromChildren)
                     return MultiColliderBakeMode.Ignore;
-                if (compoundAuthoring.colliders == null)
-                    continue;
 
                 foreach (var child in compoundAuthoring.colliders)
                 {
-                    if (child == null) // Child could have been destroyed, resulting in a missing reference. Just ignore this rather than throw.
-                        continue;
                     if (child.gameObject == authoring.gameObject)
                         return MultiColliderBakeMode.Ignore;
                 }

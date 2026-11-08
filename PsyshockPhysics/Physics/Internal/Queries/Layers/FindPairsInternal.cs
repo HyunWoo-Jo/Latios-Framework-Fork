@@ -589,19 +589,6 @@ namespace Latios.Psyshock
                                                                                   false,
                                                                                   false);
                                 }
-                                else
-                                {
-                                    FindPairsSweepMethods.BipartiteSweepCellCross(in world.layer,
-                                                                                  in world.layer,
-                                                                                  in bucket,
-                                                                                  in crossBucket,
-                                                                                  in maskA,
-                                                                                  in maskA,
-                                                                                  jobIndex,
-                                                                                  ref processor,
-                                                                                  false,
-                                                                                  false);
-                                }
                                 processor.EndBucket(in context);
                             }
                             Physics.kCrossMarker.End();

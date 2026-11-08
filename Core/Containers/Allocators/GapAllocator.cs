@@ -1,5 +1,4 @@
 using System.Collections.Generic;
-using System.Diagnostics;
 using Unity.Collections;
 using Unity.Collections.LowLevel.Unsafe;
 using Unity.Mathematics;
@@ -89,7 +88,6 @@ namespace Latios.Unsafe
             bool overflow = false;
             if (!AllocateInGap(ref gaps, countNeeded, out var result))
             {
-                CheckOverflow(countNeeded, bufferUsedSize);
                 result          = bufferUsedSize;
                 bufferUsedSize += countNeeded;
                 if (bufferUsedSize > bufferMaxSize)
@@ -160,13 +158,6 @@ namespace Latios.Unsafe
             {
                 return a.x.CompareTo(b.x);
             }
-        }
-
-        [Conditional("ENABLE_UNITY_COLLECTIONS_CHECKS"), Conditional("UNITY_DOTS_DEBUG")]
-        static void CheckOverflow(uint needed, uint used)
-        {
-            if ((ulong)used + needed > uint.MaxValue)
-                throw new System.ArgumentOutOfRangeException($"Used {used} plus needed {needed} exceeds the maximum integer size allowed of {uint.MaxValue}");
         }
     }
 }

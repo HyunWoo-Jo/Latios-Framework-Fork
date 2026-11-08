@@ -10,7 +10,6 @@ using Unity.Entities;
 using Unity.Jobs;
 using Unity.Jobs.LowLevel.Unsafe;
 using Unity.Mathematics;
-using UnityEngine;
 
 namespace Latios.Psyshock
 {
@@ -45,7 +44,11 @@ namespace Latios.Psyshock
         /// Returns the StreamSpan as a .NET Span
         /// </summary>
         /// <returns></returns>
-        public Span<T> AsSpan() => new Span<T>(m_ptr, length);
+        public Span<T> AsSpan()
+        {
+            PairStream.CheckNotNull(m_ptr);
+            return new Span<T>(m_ptr, length);
+        }
 
         /// <summary>
         /// Implicitly converts this StreamSpan into a DynamicStreamSpan.
@@ -75,6 +78,7 @@ namespace Latios.Psyshock
         public StreamSpan<T> GetSpan<T>() where T : unmanaged
         {
             CheckTypeHash<T>();
+            PairStream.CheckNotNull(m_ptr);
             return new StreamSpan<T> { m_ptr = (T*)m_ptr, m_length = m_length };
         }
 
@@ -284,16 +288,13 @@ namespace Latios.Psyshock
         public ref T AddPairFromOtherStreamAndGetRef<T>(in Pair pairFromOtherStream, out Pair pairInThisStream) where T : unmanaged
         {
             CheckStreamsMatch(pairFromOtherStream);
-            var root = CopyPairImpl(pairFromOtherStream,
-                                    UnsafeUtility.SizeOf<T>(),
-                                    UnsafeUtility.AlignOf<T>(),
-                                    BurstRuntime.GetHashCode32<T>(),
-                                    false,
-                                    out pairInThisStream);
-            pairInThisStream.header->rootPtr = root;
-            ref var result                   = ref UnsafeUtility.AsRef<T>(root);
-            result                           = default;
-            return ref result;
+            return ref AddPairAndGetRef<T>(pairFromOtherStream.entityA,
+                                           pairFromOtherStream.index,
+                                           pairFromOtherStream.aIsRW,
+                                           pairFromOtherStream.entityB,
+                                           pairFromOtherStream.index,
+                                           pairFromOtherStream.bIsRW,
+                                           out pairInThisStream);
         }
 
         /// <summary>
@@ -307,12 +308,15 @@ namespace Latios.Psyshock
         public void* AddPairFromOtherStreamRaw(in Pair pairFromOtherStream, int sizeInBytes, int alignInBytes, out Pair pairInThisStream)
         {
             CheckStreamsMatch(pairFromOtherStream);
-            return CopyPairImpl(in pairFromOtherStream,
-                                sizeInBytes,
-                                alignInBytes,
-                                0,
-                                true,
-                                out pairInThisStream);
+            return AddPairRaw(pairFromOtherStream.entityA,
+                              pairFromOtherStream.index,
+                              pairFromOtherStream.aIsRW,
+                              pairFromOtherStream.entityB,
+                              pairFromOtherStream.index,
+                              pairFromOtherStream.bIsRW,
+                              sizeInBytes,
+                              alignInBytes,
+                              out pairInThisStream);
         }
 
         /// <summary>
@@ -343,8 +347,6 @@ namespace Latios.Psyshock
                 ref var otherStream = ref pairStreamToStealFrom.data.blockStreamArray[i];
                 stream.ConcatenateFrom(ref otherStream);
             }
-            data.state->needsAliasChecks = true;
-            data.state->needsIslanding   = true;
         }
 
         /// <summary>
@@ -507,7 +509,7 @@ namespace Latios.Psyshock
             public bool enabled
             {
                 get => (ReadHeaderParallel().flags & PairHeader.kEnabled) == PairHeader.kEnabled;
-                set => Bits.SetBit(ref WriteHeader().flags, PairHeader.kEnabled, value);
+                set => WriteHeader().flags |= PairHeader.kEnabled;
             }
 
             /// <summary>
@@ -1023,51 +1025,6 @@ namespace Latios.Psyshock
                 rootTypeHash = typeHash,
                 flags        =
                     (byte)((aIsRW ? PairHeader.kWritableA : default) + (bIsRW ? PairHeader.kWritableB : default) + PairHeader.kEnabled +
-                           (isRaw ? PairHeader.kRootPtrIsRaw : default))
-            };
-
-            pair = new Pair
-            {
-                data                     = data,
-                header                   = headerPtr,
-                index                    = targetStream,
-                version                  = data.state->pairPtrVersion,
-                isParallelKeySafe        = false,
-                areEntitiesSafeInContext = false,
-#if ENABLE_UNITY_COLLECTIONS_CHECKS
-                m_Safety = m_Safety,
-#endif
-            };
-
-            var root           = pair.AllocateRaw(sizeInBytes, alignInBytes);
-            headerPtr->rootPtr = root;
-            return root;
-        }
-
-        void* CopyPairImpl(in Pair referencePair,
-                           int sizeInBytes,
-                           int alignInBytes,
-                           int typeHash,
-                           bool isRaw,
-                           out Pair pair)
-        {
-            CheckWriteAccess();
-
-            data.state->enumeratorVersion++;
-            int targetStream = referencePair.streamIndex;
-            if (targetStream >= IndexStrategies.FirstMixedStreamIndex(data.cellCount))
-                data.state->needsIslanding = true;
-            else
-                data.state->needsAliasChecks = true;
-
-            var headerPtr = (PairHeader*)UnsafeUtility.AddressOf(ref data.pairHeaders.Allocate(targetStream));
-            *headerPtr    = new PairHeader
-            {
-                entityA      = referencePair.entityA,
-                entityB      = referencePair.entityB,
-                rootTypeHash = typeHash,
-                flags        =
-                    (byte)((referencePair.aIsRW ? PairHeader.kWritableA : default) + (referencePair.bIsRW ? PairHeader.kWritableB : default) + PairHeader.kEnabled +
                            (isRaw ? PairHeader.kRootPtrIsRaw : default))
             };
 

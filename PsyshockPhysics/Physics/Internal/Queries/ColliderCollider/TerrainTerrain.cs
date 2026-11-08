@@ -55,31 +55,31 @@ namespace Latios.Psyshock
             return hit;
         }
 
-        public static unsafe void DistanceBetweenAll<T>(in TerrainCollider terrainA,
-                                                        in RigidTransform aTransform,
-                                                        in TerrainCollider terrainB,
-                                                        in RigidTransform bTransform,
-                                                        float maxDistance,
-                                                        ref T processor) where T : unmanaged, IDistanceBetweenAllProcessor
+        public static void DistanceBetweenAll<T>(in TerrainCollider terrainA,
+                                                 in RigidTransform aTransform,
+                                                 in TerrainCollider terrainB,
+                                                 in RigidTransform bTransform,
+                                                 float maxDistance,
+                                                 ref T processor) where T : unmanaged, IDistanceBetweenAllProcessor
         {
-            fixed (T* processorPtr = &processor)
+            ref var blobB        = ref terrainB.terrainColliderBlob.Value;
+            var     trianglesInB = blobB.quadsPerRow * blobB.quadRows * 2;
+            for (int i = 0; i < trianglesInB; i++)
             {
-                var     patcher      = new DistanceAllResultPatcher<T> { processor = processorPtr };
-                ref var blobB                                                      = ref terrainB.terrainColliderBlob.Value;
-                var     trianglesInB                                               = blobB.quadsPerRow * blobB.quadRows * 2;
-                for (int i = 0; i < trianglesInB; i++)
-                {
-                    patcher.subCollider = i;
-                    var triangleIndices = blobB.GetTriangle(i);
-                    var triangle        = PointRayTerrain.CreateLocalTriangle(ref blobB, triangleIndices, terrainB.baseHeightOffset, terrainB.scale);
+                var triangleIndices = blobB.GetTriangle(i);
+                var triangle        = PointRayTerrain.CreateLocalTriangle(ref blobB, triangleIndices, terrainB.baseHeightOffset, terrainB.scale);
 
-                    TriangleTerrain.DistanceBetweenAll(in terrainA,
-                                                       aTransform,
-                                                       in triangle,
-                                                       bTransform,
-                                                       maxDistance,
-                                                       ref patcher);
-                }
+                bool newHit = TriangleTerrain.DistanceBetween(in terrainA,
+                                                              aTransform,
+                                                              in triangle,
+                                                              bTransform,
+                                                              maxDistance,
+                                                              out var newResult);
+
+                newResult.subColliderIndexB = i;
+
+                if (newHit)
+                    processor.Execute(in newResult);
             }
         }
 
@@ -125,22 +125,9 @@ namespace Latios.Psyshock
                                                                           in RigidTransform bTransform,
                                                                           in ColliderDistanceResult distanceResult)
         {
-            var triangleIndices = terrainB.terrainColliderBlob.Value.GetTriangle(distanceResult.subColliderIndexB);
+            var triangleIndices = terrainB.terrainColliderBlob.Value.GetTriangle(distanceResult.subColliderIndexA);
             var triangle        = PointRayTerrain.CreateLocalTriangle(ref terrainB.terrainColliderBlob.Value, triangleIndices, terrainB.baseHeightOffset, terrainB.scale);
-            return TriangleTerrain.UnityContactsBetween(in terrainA, in aTransform, in triangle, in bTransform, distanceResult);
-        }
-
-        unsafe struct DistanceAllResultPatcher<T> : IDistanceBetweenAllProcessor where T : unmanaged, IDistanceBetweenAllProcessor
-        {
-            public T*  processor;
-            public int subCollider;
-
-            public void Execute(in ColliderDistanceResult result)
-            {
-                var forward               = result;
-                forward.subColliderIndexA = subCollider;
-                processor->Execute(in forward);
-            }
+            return TriangleTerrain.UnityContactsBetween(in terrainA, in aTransform, in triangle, in bTransform, distanceResult.ToFlipped()).ToFlipped();
         }
     }
 }

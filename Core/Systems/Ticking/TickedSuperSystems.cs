@@ -34,8 +34,6 @@ namespace Latios.Systems
         protected override void CreateSystems()
         {
             EnableSystemSorting = true;
-
-            GetOrCreateAndAddUnmanagedSystem<TickedAutoPreviousSystem>();
         }
     }
 
@@ -111,12 +109,9 @@ namespace Latios.Systems
             {
                 World.PushTime(new Unity.Core.TimeData(tickingState.elapsedTime, tickingState.deltaTime));
                 base.OnUpdate();
-                if (i + 1 < tickingState.ticksThisFrame)
-                {
-                    tickingState.elapsedTime           += tickingState.deltaTime;
-                    tickingState.previousEvaluatedTick  = tickingState.tick;
-                    tickingState.tick++;
-                }
+                tickingState.elapsedTime           += tickingState.deltaTime;
+                tickingState.previousEvaluatedTick  = tickingState.tick;
+                tickingState.tick++;
                 worldBlackboardEntity.SetComponentData(tickingState);
                 World.PopTime();
             }

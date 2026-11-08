@@ -226,10 +226,10 @@ namespace Latios.Kinemation.Authoring
             else
             {
                 var additionalEntity = CreateAdditionalEntity(TransformUsageFlags.Renderable, false, $"{GetName()}-TransparentRenderEntity");
-                if (useFadeOut)
+                if (settings.useFadeOut)
                 {
-                    AddComponent(                   additionalEntity, fadeOut);
-                    AddComponent<UseMmiRangeLodTag>(additionalEntity);
+                    AddComponent(                   entity, fadeOut);
+                    AddComponent<UseMmiRangeLodTag>(entity);
                 }
                 RenderingBakingTools.BakeLodMaskForEntity(this, additionalEntity, lodSettings, out _);
                 Span<MeshRendererBakeSettings> renderers = stackalloc MeshRendererBakeSettings[2];
