@@ -66,7 +66,7 @@ namespace Latios
             CheckAllocator(allocator);
 
             m_Safety = CollectionHelper.CreateSafetyHandle(allocator);
-            CollectionHelper.SetStaticSafetyId<EntityOperationCommandBuffer>(ref m_Safety, ref s_staticSafetyId.Data);
+            CollectionHelper.SetStaticSafetyId<AddComponentsCommandBufferUntyped>(ref m_Safety, ref s_staticSafetyId.Data);
             AtomicSafetyHandle.SetBumpSecondaryVersionOnScheduleWrite(m_Safety, true);
 #endif
 
@@ -380,7 +380,7 @@ namespace Latios
                     RadixSort.RankSortInt(ranks, targetSortkeyArray);
                     var             sortedTargets = new NativeList<Entity>(count, Allocator.Temp);
                     NativeList<int> pruneIndices  = default;
-                    if (accb.m_state->destroyedEntityResolution == AddComponentsDestroyedEntityResolution.DropData)
+                    if (accb.m_state->destroyedEntityResolution != AddComponentsDestroyedEntityResolution.AddToNewEntityAndDestroy)
                         pruneIndices = new NativeList<int>(64, Allocator.Temp);
                     for (int i = 0; i < count; i++)
                     {
@@ -392,6 +392,7 @@ namespace Latios
                         else if (accb.m_state->destroyedEntityResolution == AddComponentsDestroyedEntityResolution.ThrowException)
                         {
                             ThrowDestroyed(entity);
+                            pruneIndices.Add(i);
                         }
                         else
                         {
@@ -400,13 +401,14 @@ namespace Latios
                             entitiesToDestroy.Add(newEntity);
                         }
                     }
-                    if (accb.m_state->destroyedEntityResolution == AddComponentsDestroyedEntityResolution.DropData && !pruneIndices.IsEmpty)
+                    AliasChecker.Detect(sortedTargets.AsReadOnly());
+                    if (accb.m_state->destroyedEntityResolution != AddComponentsDestroyedEntityResolution.AddToNewEntityAndDestroy && !pruneIndices.IsEmpty)
                     {
                         var newPtrs    = new NativeArray<UnsafeIndexedBlockList.ElementPtr>(count - pruneIndices.Length, Allocator.Temp, NativeArrayOptions.UninitializedMemory);
                         int pruneIndex = 0;
                         for (int i = 0; i < count; i++)
                         {
-                            if (i == pruneIndices[pruneIndex])
+                            if (pruneIndex < pruneIndices.Length && i == pruneIndices[pruneIndex])
                                 pruneIndex++;
                             else
                             {
@@ -415,6 +417,7 @@ namespace Latios
                             }
                         }
                         unsortedComponentDataPtrs = newPtrs;
+                        count                     = newPtrs.Length;
                     }
 
                     // Step 4: Add components to the targets
@@ -504,7 +507,16 @@ namespace Latios
                     public void AddAndCheck(Entity entity)
                     {
                         if (!m_entities.Add(entity))
-                            throw new InvalidOperationException($"An entity {entity} was added to the same AddComponentsCommandBuffer multiple times.");
+                            throw new InvalidOperationException($"An entity {entity.ToFixedString()} was added to the same AddComponentsCommandBuffer multiple times.");
+                    }
+
+                    [Conditional("ENABLE_UNITY_COLLECTIONS_CHECKS"), Conditional("UNITY_DOTS_DEBUG")]
+                    public static void Detect(ReadOnlySpan<Entity> entities)
+                    {
+                        var checker = new AliasChecker();
+                        checker.Init(entities.Length);
+                        foreach (var e in entities)
+                            checker.AddAndCheck(e);
                     }
                 }
 

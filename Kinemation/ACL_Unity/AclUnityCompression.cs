@@ -17,7 +17,8 @@ namespace AclUnity
             internal NativeArray<byte> compressedData;
             internal NativeArray<byte> extraCompressedData;
 
-            public int sizeInBytes => compressedData.Length != 0 ? 16 + compressedData.Length + extraCompressedData.Length : 0;
+            int alignedLength => extraCompressedData.Length != 0 ? CollectionHelper.Align(compressedData.Length, 16) : compressedData.Length;
+            public int sizeInBytes => compressedData.Length != 0 ? 16 + alignedLength + extraCompressedData.Length : 0;
 
             public void CopyTo(NativeArray<byte> arrayToCopyTo)
             {
@@ -75,6 +76,7 @@ namespace AclUnity
                                                                    )
         {
             CheckParentIndicesIsValid(parentIndices);
+            CheckTrackCount(parentIndices.Length);
             CheckClipDataIsValid(aosClipData, parentIndices.Length);
             CheckSampleRateIsValid(sampleRate);
             CheckSkeletonSettingsIsValid(settings);
@@ -186,6 +188,7 @@ namespace AclUnity
                                                                   )
         {
             CheckErrorsByTrackIsValid(maxErrorsByTrack);
+            CheckTrackCount(maxErrorsByTrack.Length);
             CheckClipDataIsValid(clipData, maxErrorsByTrack.Length);
             CheckSampleRateIsValid(sampleRate);
             CheckCompressionLevelIsValid(compressionLevel);
@@ -300,6 +303,13 @@ namespace AclUnity
         {
             if (!maxErrorsByTrack.IsCreated || maxErrorsByTrack.Length == 0)
                 throw new ArgumentException("maxErrorsByTrack is invalid");
+        }
+
+        [Conditional("ENABLE_UNITY_COLLECTIONS_CHECKS"), Conditional("UNITY_DOTS_DEBUG")]
+        static void CheckTrackCount(int trackCount)
+        {
+            if (trackCount > short.MaxValue)
+                throw new ArgumentOutOfRangeException(nameof(trackCount), $"ACL supports at most {short.MaxValue} tracks per clip, but {trackCount} were provided.");
         }
 
         [Conditional("ENABLE_UNITY_COLLECTIONS_CHECKS"), Conditional("UNITY_DOTS_DEBUG")]

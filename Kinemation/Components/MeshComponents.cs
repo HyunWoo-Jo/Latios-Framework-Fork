@@ -34,6 +34,14 @@ namespace Latios.Kinemation
     }
 
     /// <summary>
+    /// An offset applied to the transparency sorting position during rendering.
+    /// </summary>
+    public struct SortingOffset : IComponentData
+    {
+        public float3 offset;
+    }
+
+    /// <summary>
     /// When present on an entity with a MaterialMeshInfo that uses ranges, every mesh instance
     /// in the range will be replaced with the mesh specified directly by the MaterialMeshInfo.
     /// This allows you to render multiple materials in a single entity using a runtime-generated mesh.
@@ -612,6 +620,14 @@ namespace Latios.Kinemation
         }
     }
 
+    /// <summary>
+    /// When this tag is present, the mesh is treated as operating in world-space, with its
+    /// vertex positions relative to the entity's transform. PostProcessMatrix is ignored.
+    /// The entity is rendered with an identity matrix except for the position offset.
+    /// RenderBounds should also encapsulate the mesh within this position-relative world-space.
+    /// </summary>
+    public struct UniqueMeshWorldPositionRelativeTag : IComponentData { }
+
     #endregion
 
     #region Material Properties
@@ -1027,14 +1043,14 @@ namespace Latios.Kinemation
         [Conditional("ENABLE_UNITY_COLLECTIONS_CHECKS"), Conditional("UNITY_DOTS_DEBUG")]
         void CheckTriangleIndex(int triangleIndex)
         {
-            if (math.clamp(triangleIndex, 0, triangleCount) != triangleIndex)
+            if ((uint)triangleIndex >= triangleCount)
                 throw new ArgumentOutOfRangeException($"Triangle index {triangleIndex} is out of range of MeshNormalizationBlob with {triangleCount} triangles.");
         }
 
         [Conditional("ENABLE_UNITY_COLLECTIONS_CHECKS"), Conditional("UNITY_DOTS_DEBUG")]
         void CheckDuplicateIndex(int rawDuplicate, int duplicateCount)
         {
-            if (math.clamp(rawDuplicate, 0, duplicateCount) != rawDuplicate)
+            if ((uint)rawDuplicate >= duplicateCount)
                 throw new ArgumentOutOfRangeException($"Duplicate index {rawDuplicate} is out of range of MeshNormalizationBlob with {duplicateCount} duplicate vertices.");
         }
 

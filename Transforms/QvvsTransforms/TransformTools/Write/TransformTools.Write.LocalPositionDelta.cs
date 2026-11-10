@@ -65,7 +65,7 @@ namespace Latios.Transforms
                 refRW.ValueRW.worldTransform            = currentTransform;
                 return;
             }
-            TranslateLocal(handle, translation, ref componentBroker);
+            TranslateLocal(handle, translation, key, ref componentBroker);
         }
 
         /// <summary>
@@ -186,13 +186,13 @@ namespace Latios.Transforms
             var handle = GetHierarchyHandle(entity, ref rootReferenceLookupRO, ref entityInHierarchyLookupRO, ref entityInHierarchyCleanupLookupRO);
             if (handle.isNull)
             {
-                RefRW<WorldTransform> refRW             = transformLookupRW.GetCheckedLookup(handle.root.entity, key).GetRefRW(entity);
+                RefRW<WorldTransform> refRW             = transformLookupRW.GetCheckedLookup(entity, key).GetRefRW(entity);
                 TransformQvvs         currentTransform  = refRW.ValueRO.worldTransform;
                 currentTransform.position              += translation;
                 refRW.ValueRW.worldTransform            = currentTransform;
                 return;
             }
-            TranslateLocal(handle, translation, ref transformLookupRW.GetCheckedLookup(entity, key), ref entityStorageInfoLookup);
+            TranslateLocal(handle, translation, ref transformLookupRW.GetCheckedLookup(handle.root.entity, key), ref entityStorageInfoLookup);
         }
 
         /// <summary>
@@ -308,7 +308,7 @@ namespace Latios.Transforms
                 refRW.ValueRW.worldTransform                  = currentTransform;
                 return;
             }
-            TranslateTickedLocal(handle, translation, ref componentBroker);
+            TranslateTickedLocal(handle, translation, key, ref componentBroker);
         }
 
         /// <summary>
@@ -342,7 +342,7 @@ namespace Latios.Transforms
         {
             if (handle.isCopyParent)
                 return;
-            ref var                      lookup     = ref ComponentBrokerAccess.From(ref componentBroker);
+            ref var                      lookup     = ref TickedComponentBrokerAccess.From(ref componentBroker);
             Span<TransformQvvs>          transforms = stackalloc TransformQvvs[] { new TransformQvvs { position = translation } };
             Span<Propagate.WriteCommand> commands   =
                 stackalloc Propagate.WriteCommand[] { new Propagate.WriteCommand
@@ -365,7 +365,7 @@ namespace Latios.Transforms
             if (handle.isCopyParent)
                 return;
             key.Validate(handle.root.entity);
-            ref var                      lookup     = ref ComponentBrokerParallelAccess.From(ref componentBroker);
+            ref var                      lookup     = ref TickedComponentBrokerParallelAccess.From(ref componentBroker);
             Span<TransformQvvs>          transforms = stackalloc TransformQvvs[] { new TransformQvvs { position = translation } };
             Span<Propagate.WriteCommand> commands   =
                 stackalloc Propagate.WriteCommand[] { new Propagate.WriteCommand
@@ -429,13 +429,13 @@ namespace Latios.Transforms
             var handle = GetHierarchyHandle(entity, ref rootReferenceLookupRO, ref entityInHierarchyLookupRO, ref entityInHierarchyCleanupLookupRO);
             if (handle.isNull)
             {
-                RefRW<TickedWorldTransform> refRW             = transformLookupRW.GetCheckedLookup(handle.root.entity, key).GetRefRW(entity);
+                RefRW<TickedWorldTransform> refRW             = transformLookupRW.GetCheckedLookup(entity, key).GetRefRW(entity);
                 TransformQvvs               currentTransform  = refRW.ValueRO.worldTransform;
                 currentTransform.position                    += translation;
                 refRW.ValueRW.worldTransform                  = currentTransform;
                 return;
             }
-            TranslateTickedLocal(handle, translation, ref transformLookupRW.GetCheckedLookup(entity, key), ref entityStorageInfoLookup);
+            TranslateTickedLocal(handle, translation, ref transformLookupRW.GetCheckedLookup(handle.root.entity, key), ref entityStorageInfoLookup);
         }
 
         /// <summary>

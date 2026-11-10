@@ -14,6 +14,14 @@ namespace Latios.Kinemation
         /// <param name="world">The World to install Kinemation into. Must be a LatiosWorld.</param>
         public static void InstallKinemation(World world)
         {
+            // The rendering systems load compute shaders and allocate GraphicsBuffers during
+            // OnCreate, which cannot work without a graphics device. Publish that fact on the
+            // worldBlackboardEntity so every other installer and SuperSystem can skip its own
+            // graphics systems, then install only the animation half here.
+            var noGraphics = !LatiosEntitiesGraphicsSystem.EntitiesGraphicsEnabled;
+            if (noGraphics)
+                (world as LatiosWorld).worldBlackboardEntity.AddComponent<NoGraphicsTag>();
+
             RenderMeshUtilityReplacer.PatchRenderMeshUtility();
 
             var unityRenderer = world.GetExistingSystemManaged<EntitiesGraphicsSystem>();
@@ -41,12 +49,15 @@ namespace Latios.Kinemation
             if (unityUpdateBounds != null)
                 unityUpdateBounds.Enabled = false;
 
-            BootstrapTools.InjectSystem(TypeManager.GetSystemTypeIndex<UpdateGraphicsBufferBrokerSystem>(),                     world);
-            BootstrapTools.InjectSystem(TypeManager.GetSystemTypeIndex<KinemationRenderSyncPointSuperSystem>(),                 world);
-            BootstrapTools.InjectSystem(TypeManager.GetSystemTypeIndex<KinemationFrameSyncPointSuperSystem>(),                  world);
-            BootstrapTools.InjectSystem(TypeManager.GetSystemTypeIndex<LatiosEntitiesGraphicsSystem>(),                         world);
-            BootstrapTools.InjectSystem(TypeManager.GetSystemTypeIndex<KinemationPostRenderSuperSystem>(),                      world);
-            BootstrapTools.InjectSystem(TypeManager.GetSystemTypeIndex<LatiosUpdateEntitiesGraphicsChunkStructureSystem>(),     world);
+            if (!noGraphics)
+            {
+                BootstrapTools.InjectSystem(TypeManager.GetSystemTypeIndex<UpdateGraphicsBufferBrokerSystem>(),                 world);
+                BootstrapTools.InjectSystem(TypeManager.GetSystemTypeIndex<KinemationRenderSyncPointSuperSystem>(),             world);
+                BootstrapTools.InjectSystem(TypeManager.GetSystemTypeIndex<KinemationFrameSyncPointSuperSystem>(),              world);
+                BootstrapTools.InjectSystem(TypeManager.GetSystemTypeIndex<LatiosEntitiesGraphicsSystem>(),                     world);
+                BootstrapTools.InjectSystem(TypeManager.GetSystemTypeIndex<KinemationPostRenderSuperSystem>(),                  world);
+                BootstrapTools.InjectSystem(TypeManager.GetSystemTypeIndex<LatiosUpdateEntitiesGraphicsChunkStructureSystem>(), world);
+            }
 
             BootstrapTools.InjectSystem(TypeManager.GetSystemTypeIndex<ForceInitializeUninitializedOptimizedSkeletonsSystem>(), world);
             BootstrapTools.InjectSystem(TypeManager.GetSystemTypeIndex<InitializeAnimatedBuffersSystem>(),                      world);
@@ -66,8 +77,21 @@ namespace Latios.Kinemation
             }
 
 #if UNITY_EDITOR
-            BootstrapTools.InjectSystem(TypeManager.GetSystemTypeIndex<KinemationAfterLiveBakingSuperSystem>(), world);
+            if (!noGraphics)
+                BootstrapTools.InjectSystem(TypeManager.GetSystemTypeIndex<KinemationAfterLiveBakingSuperSystem>(), world);
 #endif
+        }
+
+        /// <summary>
+        /// Install a created CPU occlusion culling system into Kinemation's culling loop.
+        /// This is installed after frustum culling and LODs have been processed, and before draw commands are generated.
+        /// </summary>
+        /// <param name="world">The world Kinemation is installed in</param>
+        /// <param name="system">The system that should be inserted into the culling loop</param>
+        public static void InstallOcclusionCullingSystem(World world, SystemHandle system)
+        {
+            var cullingSuperSystem = world.GetExistingSystemManaged<KinemationCullingSuperSystem>();
+            cullingSuperSystem.InstallOcclusionCullingSystem(system);
         }
     }
 }

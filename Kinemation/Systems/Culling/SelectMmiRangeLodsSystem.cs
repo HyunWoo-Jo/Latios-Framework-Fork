@@ -28,7 +28,7 @@ namespace Latios.Kinemation.Systems
         {
             var api = this.OnCreateForLatios(ref state);
 
-            m_query = state.Fluent().With<MaterialMeshInfo, LodCrossfade>(false).With<WorldRenderBounds>(true)
+            m_query = state.Fluent().With<MaterialMeshInfo, LodCrossfade>(false).With<WorldRenderBounds>(true).With<ChunkPerCameraCullingMask>(false, true)
                       .WithAnyEnabled<MmiRange2LodSelect, MmiRange3LodSelect, MeshLodCurve>(true).WithWorldTransformReadOnly().Build();
 
             api.worldBlackboardEntity.AddComponentDataIfMissing(new MeshLodCrossfadeMargin { margin = (half)0.05f });
@@ -75,6 +75,7 @@ namespace Latios.Kinemation.Systems
             [ReadOnly, Inject] ComponentTypeHandle<MmiRange3LodSelect>                       select3Handle;
             [ReadOnly, Inject] ComponentTypeHandle<MmiRangeLodFlags>                         rangeLodFlagsHandle;
             [ReadOnly, Inject] ComponentTypeHandle<LodHeightPercentagesWithCrossfadeMargins> lodGroupCrossfades;
+            [ReadOnly, Inject] ComponentTypeHandle<LodGroupReferencePoint>                   hlodReferencePointHandle;
             [ReadOnly, Inject] ComponentTypeHandle<MeshLodCurve>                             meshLodCurveHandle;
 
             [Inject] ComponentTypeHandle<ChunkPerCameraCullingMask> perCameraMaskHandle;
@@ -106,9 +107,10 @@ namespace Latios.Kinemation.Systems
                 var select3s                = chunk.GetComponentDataPtrRO(ref select3Handle);
                 var rangeLodFlagsArray      = isShadowCasting ? chunk.GetComponentDataPtrRO(ref rangeLodFlagsHandle) : null;
                 var lodGroupPercentages     = chunk.GetComponentDataPtrRO(ref lodGroupCrossfades);
+                var hlodReferencePoints     = lodGroupPercentages != null? chunk.GetComponentDataPtrRO(ref hlodReferencePointHandle) : null;
                 var meshLods                = chunk.GetComponentDataPtrRW(ref meshLodHandle);
                 var enableMeshLodCrossfades = chunk.GetEnabledMask(ref meshLodHandle);
-                var meshLodCurves           = chunk.GetComponentDataPtrRO(ref meshLodCurveHandle);
+                var meshLodCurves           = meshLods != null? chunk.GetComponentDataPtrRO(ref meshLodCurveHandle) : null;
                 var enumerator              = new ChunkEntityBatchEnumerator(true, new v128(mask.lower.Value, mask.upper.Value), chunk.Count);
                 while (enumerator.NextRange(out var rangeStart, out var rangeCount))
                 {
@@ -156,8 +158,8 @@ namespace Latios.Kinemation.Systems
                         if (rangeLodFlagsArray != null)
                         {
                             var flags     = rangeLodFlagsArray[i];
-                            nullSelect.y &= !flags.disableLod1ShadowCasting;
-                            nullSelect.z &= !flags.disableLod2ShadowCasting;
+                            nullSelect.y |= flags.disableLod1ShadowCasting;
+                            nullSelect.z |= flags.disableLod2ShadowCasting;
                         }
 
                         float  height = math.cmax(boundsArray[i].Value.Extents) * 2f;
@@ -166,7 +168,9 @@ namespace Latios.Kinemation.Systems
                         if (lodGroupPercentages != null)
                         {
                             // We need to convert group LOD thresholds into local LOD thresholds. The key differences is that they use different center points and relative heights.
-                            var   transform        = transforms[i].worldTransformQvvs;
+                            var transform = transforms[i].worldTransformQvvs;
+                            if (hlodReferencePoints != null)
+                                transform.position = qvvs.TransformPoint(in transform, hlodReferencePoints[i].localPosition);
                             float groupWorldHeight = math.abs(lodGroupPercentages[i].localSpaceHeight) * math.abs(transform.scale) * math.cmax(math.abs(transform.stretch));
                             float factor           = height / groupWorldHeight;
                             if (isPerspective)
@@ -208,8 +212,8 @@ namespace Latios.Kinemation.Systems
                             mask.ClearBitAtIndex(i);
                         if (lodGroupPercentages == null || !crossfadesEnabled[i])
                             crossfadesEnabled[i] = crossfadeEnabled;
-                        if (enableMeshLodCrossfade)
-                            enableMeshLodCrossfades[i] = true;
+                        if (meshLods != null)
+                            enableMeshLodCrossfades[i] = enableMeshLodCrossfade;
                         if (select2s != null || select3s != null)
                             mmis[i] = mmi;
                     }

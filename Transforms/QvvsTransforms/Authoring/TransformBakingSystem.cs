@@ -81,6 +81,7 @@ namespace Latios.Transforms.Authoring.Systems
                 rootReferenceHandle               = GetComponentTypeHandle<RootReference>(true),
                 authoringSiblingIndexHandle       = GetComponentTypeHandle<AuthoringSiblingIndex>(true),
                 mergedInheritanceFlagsHandle      = GetComponentTypeHandle<MergedInheritanceFlags>(true),
+                mergedInheritanceFlagsLookup      = GetComponentLookup<MergedInheritanceFlags>(true),
                 entityInHierarchyLookup           = GetBufferLookup<EntityInHierarchy>(true),
                 bakedLocalTransformOverrideHandle = GetComponentTypeHandle<BakedLocalTransformOverride>(true),
                 localOverrideCleanupTagHandle     = GetComponentTypeHandle<LocalOverrideCleanupTag>(true),
@@ -132,6 +133,7 @@ namespace Latios.Transforms.Authoring.Systems
                 transformAuthoringLookup          = GetComponentLookup<TransformAuthoring>(true),
                 inheritanceFlagsLookup            = GetComponentLookup<MergedInheritanceFlags>(true),
                 bakedLocalTransformOverrideLookup = GetComponentLookup<BakedLocalTransformOverride>(true),
+                esil                              = GetEntityStorageInfoLookup(),
                 worldTransformLookup              = GetComponentLookup<WorldTransform>(false),
                 rootReferenceLookup               = GetComponentLookup<RootReference>(false),
                 entityInHierarchyLookup           = GetBufferLookup<EntityInHierarchy>(false),
@@ -199,15 +201,37 @@ namespace Latios.Transforms.Authoring.Systems
 
             public void Remove(Entity entity, ref NativeHashSet<Entity> dirtyRoots)
             {
-                ref var node = ref nodes.ElementAt(entityToNodeIndexMap[entity]);
+                var     index = entityToNodeIndexMap[entity];
+                ref var node  = ref nodes.ElementAt(index);
                 if (node.children.IsCreated)
                 {
-                    foreach (var child in node.children)
-                    {
-                        ChangeParent(child, -1, Entity.Null, ref dirtyRoots);
-                    }
+                    while (node.children.Length > 0)
+                        ChangeParent(node.children[node.children.Length - 1], -1, Entity.Null, ref dirtyRoots);
                     node.children.Dispose();
                 }
+                if (node.parent != Entity.Null)
+                {
+                    ref var parentNode = ref nodes.ElementAt(entityToNodeIndexMap[node.parent]);
+                    for (int i = 0; i < parentNode.children.Length; i++)
+                    {
+                        if (parentNode.children[i] == entity)
+                        {
+                            parentNode.children.RemoveAtSwapBack(i);
+                            FindAndDirtyRoot(parentNode.entity, ref dirtyRoots);
+                            break;
+                        }
+                    }
+                }
+                if (index + 1 == nodes.Length)
+                {
+                    nodes.Length--;
+                    entityToNodeIndexMap.Remove(entity);
+                    return;
+                }
+                node                              = nodes[nodes.Length - 1];
+                entityToNodeIndexMap[node.entity] = index;
+                nodes.Length--;
+                entityToNodeIndexMap.Remove(entity);
             }
 
             public void ChangeOrder(Entity entity, int order, ref NativeHashSet<Entity> dirtyRoots)
@@ -285,6 +309,8 @@ namespace Latios.Transforms.Authoring.Systems
             {
                 foreach (var entity in deadEntities)
                     hierarchy.Remove(entity, ref dirtyRoots);
+                foreach (var entity in deadEntities)
+                    dirtyRoots.Remove(entity);
                 foreach (var entity in newEntities)
                     hierarchy.Add(entity);
             }
@@ -300,6 +326,7 @@ namespace Latios.Transforms.Authoring.Systems
             [ReadOnly] public ComponentTypeHandle<RootReference>               rootReferenceHandle;
             [ReadOnly] public ComponentTypeHandle<AuthoringSiblingIndex>       authoringSiblingIndexHandle;
             [ReadOnly] public ComponentTypeHandle<MergedInheritanceFlags>      mergedInheritanceFlagsHandle;
+            [ReadOnly] public ComponentLookup<MergedInheritanceFlags>          mergedInheritanceFlagsLookup;
             [ReadOnly] public BufferLookup<EntityInHierarchy>                  entityInHierarchyLookup;
             [ReadOnly] public ComponentTypeHandle<BakedLocalTransformOverride> bakedLocalTransformOverrideHandle;
             [ReadOnly] public ComponentTypeHandle<LocalOverrideCleanupTag>     localOverrideCleanupTagHandle;
@@ -427,6 +454,10 @@ namespace Latios.Transforms.Authoring.Systems
                         if (transformAuthoring.AuthoringParent != Entity.Null)
                         {
                             worldTransform = GetWorldTransform(in transformAuthoring, true);
+                            if (hasInheritanceFlags && inheritanceFlagsArray[i].flags.HasCopyParent())
+                            {
+                                GetParentStretch(in transformAuthoring, out worldTransform.stretch);
+                            }
                         }
                         else
                         {
@@ -520,6 +551,24 @@ namespace Latios.Transforms.Authoring.Systems
                     return worldTransform;
                 }
             }
+
+            void GetParentStretch(in TransformAuthoring transformAuthoring, out float3 stretch)
+            {
+                stretch = 1f;
+                if (transformAuthoring.AuthoringParent == Entity.Null)
+                    return;
+                var parent = transformAuthoring.AuthoringParent;
+                while (parent != Entity.Null)
+                {
+                    var parentTransform = transformAuthoringLookup[parent];
+                    TransformBakeUtils.GetScaleAndStretch(parentTransform.LocalScale, out _, out stretch);
+                    if (!mergedInheritanceFlagsLookup.TryGetComponent(parent, out var flags))
+                        return;
+                    if (!flags.flags.HasCopyParent())
+                        return;
+                    parent = parentTransform.AuthoringParent;
+                }
+            }
         }
 
         [BurstCompile]
@@ -599,6 +648,7 @@ namespace Latios.Transforms.Authoring.Systems
             [ReadOnly] public ComponentLookup<TransformAuthoring>                        transformAuthoringLookup;
             [ReadOnly] public ComponentLookup<MergedInheritanceFlags>                    inheritanceFlagsLookup;
             [ReadOnly] public ComponentLookup<BakedLocalTransformOverride>               bakedLocalTransformOverrideLookup;
+            [ReadOnly] public EntityStorageInfoLookup                                    esil;
             [NativeDisableParallelForRestriction] public ComponentLookup<WorldTransform> worldTransformLookup;
             [NativeDisableParallelForRestriction] public ComponentLookup<RootReference>  rootReferenceLookup;
             [NativeDisableParallelForRestriction] public BufferLookup<EntityInHierarchy> entityInHierarchyLookup;
@@ -606,6 +656,8 @@ namespace Latios.Transforms.Authoring.Systems
             UnsafeQueue<EnqueuedChild> queue;
             UnsafeList<TransformQvvs>  computedTransforms;
             UnsafeList<EnqueuedChild>  childrenToSort;
+
+            HasChecker<BakedParentOverride> parentOverrideChecker;
 
             public void Execute(int index)
             {
@@ -722,7 +774,7 @@ namespace Latios.Transforms.Authoring.Systems
                 var transformAuthoring = transformAuthoringLookup[child];
                 TransformBakeUtils.GetScaleAndStretch(transformAuthoring.LocalScale, out var scale, out var stretch);
                 var workingTransform = new TransformQvvs(transformAuthoring.LocalPosition, transformAuthoring.LocalRotation, scale, stretch);
-                if (parent == transformAuthoring.AuthoringParent)
+                if (parent == transformAuthoring.AuthoringParent || parentOverrideChecker[esil[child].Chunk])
                 {
                     localTransform = new TransformQvs(transformAuthoring.LocalPosition, transformAuthoring.LocalRotation, scale);
                     return qvvs.mulclean(parentTransform, workingTransform);
@@ -735,7 +787,7 @@ namespace Latios.Transforms.Authoring.Systems
                     TransformBakeUtils.GetScaleAndStretch(intermediateAuthoring.LocalScale, out var interScale, out var interStretch);
                     var interTransform = new TransformQvvs(intermediateAuthoring.LocalPosition, intermediateAuthoring.LocalRotation, interScale, interStretch);
                     workingTransform   = qvvs.mulclean(interTransform, workingTransform);
-                    nextParent         = transformAuthoring.AuthoringParent;
+                    nextParent         = intermediateAuthoring.AuthoringParent;
                 }
                 localTransform = new TransformQvs(workingTransform.position, workingTransform.rotation, workingTransform.scale);
                 return qvvs.mulclean(parentTransform, workingTransform);

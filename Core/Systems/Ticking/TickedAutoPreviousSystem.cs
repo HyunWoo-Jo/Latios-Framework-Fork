@@ -4,6 +4,7 @@ using Unity.Burst.Intrinsics;
 using Unity.Collections;
 using Unity.Collections.LowLevel.Unsafe;
 using Unity.Entities;
+using Unity.Entities.Exposed;
 using Unity.Jobs;
 
 namespace Latios.Systems
@@ -17,11 +18,13 @@ namespace Latios.Systems
         LatiosWorldUnmanaged latiosWorld;
 
         NativeList<TypePairState> typePairStates;
+        uint                      twoAgoVersion;
 
         public void OnCreate(ref SystemState state)
         {
             latiosWorld = state.GetLatiosWorldUnmanaged();
 
+            twoAgoVersion  = 0;
             typePairStates = new NativeList<TypePairState>(Allocator.Persistent);
             foreach (var typeInfo in TypeManager.AllTypes)
             {
@@ -92,6 +95,10 @@ namespace Latios.Systems
                     var srcHandle = advance ? typePairState.currentHandle : typePairState.previousHandle;
                     srcHandle     = srcHandle.CopyToReadOnly();
                     var dstHandle = advance ? typePairState.previousHandle : typePairState.currentHandle;
+                    if (advance)
+                        typePairState.query.SetOverrideChangeFilterVersion(twoAgoVersion);
+                    srcHandle.Update(ref state);
+                    dstHandle.Update(ref state);
                     jhs.Add(new Job
                     {
                         srcHandle = srcHandle,
@@ -104,6 +111,7 @@ namespace Latios.Systems
             {
                 state.Dependency = JobHandle.CombineDependencies(jhs.AsArray());
             }
+            twoAgoVersion = state.LastSystemVersion;
         }
 
         struct TypePairState
@@ -137,11 +145,20 @@ namespace Latios.Systems
                         UnsafeUtility.MemCpy(dstPtr, srcPtr, length * (long)size);
                     }
                 }
-                else
+                else if (!srcType.IsZeroSized)
                 {
                     var src = chunk.GetDynamicComponentDataArrayReinterpret<byte>(ref srcHandle, size);
                     var dst = chunk.GetDynamicComponentDataArrayReinterpret<byte>(ref dstHandle, size);
                     dst.CopyFrom(src);
+                }
+                if (srcType.IsEnableable)
+                {
+                    var srcBits = chunk.GetEnabledMask(ref srcHandle);
+                    var dstBits = chunk.GetEnabledMask(ref dstHandle);
+                    for (int i = 0; i < chunk.Count; i++)
+                    {
+                        dstBits[i] = srcBits[i];
+                    }
                 }
             }
         }
